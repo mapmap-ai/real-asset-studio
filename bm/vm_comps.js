@@ -37,18 +37,18 @@
   // ── 패널
   var css = document.createElement("style");
   css.textContent = "#vmc{position:fixed;right:16px;bottom:16px;z-index:2147483000;width:640px;max-width:calc(100vw - 32px);max-height:80vh;display:flex;flex-direction:column;background:#fff;color:#1d2433;border:1px solid #d0d5dd;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.25);font:13px/1.45 'Malgun Gothic',sans-serif}" +
-    "#vmc *{box-sizing:border-box;font-family:inherit}#vmc .hd{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#FD5108;color:#fff;border-radius:10px 10px 0 0;cursor:move;user-select:none}" +
+    "#vmc *{box-sizing:border-box;font-family:inherit}#vmc .hd{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#D9653B;color:#fff;border-radius:10px 10px 0 0;cursor:move;user-select:none}" +
     "#vmc .hd b{flex:1;font-size:14px}#vmc .hd button{background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0 4px}" +
     "#vmc .bd{padding:8px 10px;display:flex;flex-direction:column;gap:7px;overflow:auto}" +
     "#vmc .f{display:flex;gap:8px;flex-wrap:wrap;align-items:center}#vmc label{display:inline-flex;align-items:center;gap:4px}" +
     "#vmc input[type=text],#vmc input[type=number],#vmc select{border:1px solid #d0d5dd;border-radius:6px;padding:4px 6px;font-size:12.5px}" +
     "#vmc input.addr{flex:1;min-width:180px}#vmc input.yr{width:64px}#vmc input.km{width:52px}#vmc input.ex{width:250px}" +
     "#vmc .row{display:flex;gap:5px;flex-wrap:wrap}#vmc .row button{padding:5px 10px;border:1px solid #d0d5dd;background:#fff;border-radius:6px;cursor:pointer;font-size:12.5px}" +
-    "#vmc .row button.pri{background:#FD5108;border-color:#FD5108;color:#fff;font-weight:700}#vmc .row button:disabled{opacity:.45;cursor:default}" +
-    "#vmc .msg{min-height:16px;font-size:12px;color:#b45309;white-space:pre-line}#vmc .sum{font-size:12.5px;background:#FFF4ED;border:1px solid #fdba8c;border-radius:6px;padding:6px 8px}" +
+    "#vmc .row button.pri{background:#D9653B;border-color:#D9653B;color:#fff;font-weight:700}#vmc .row button:disabled{opacity:.45;cursor:default}" +
+    "#vmc .msg{min-height:16px;font-size:12px;color:#b45309;white-space:pre-line}#vmc .sum{font-size:12.5px;background:#FBEFE9;border:1px solid #EDB49C;border-radius:6px;padding:6px 8px}" +
     "#vmc table{border-collapse:collapse;width:100%;font-size:12px}#vmc th,#vmc td{border-bottom:1px solid #eaecf0;padding:4px 5px;text-align:left;white-space:nowrap}" +
     "#vmc th{background:#f6f7f9;position:sticky;top:0}#vmc td.n,#vmc th.n{text-align:right}#vmc tr.subj td{background:#fff7d6}#vmc tr.out td{color:#98a2b3}" +
-    "#vmc td.note{white-space:normal;min-width:300px;font-size:11.5px;color:#b45309}#vmc a{color:#FD5108}#vmc .tw{overflow:auto;max-height:38vh;border:1px solid #eaecf0;border-radius:6px}" +
+    "#vmc td.note{white-space:normal;min-width:300px;font-size:11.5px;color:#b45309}#vmc a{color:#D9653B}#vmc .tw{overflow:auto;max-height:38vh;border:1px solid #eaecf0;border-radius:6px}" +
     "#vmc.min .bd{display:none}#vmc .hint{font-size:11.5px;color:#667085}" +
     "#vmc select.cand{flex:1;min-width:260px}#vmc select.rg{max-width:220px}#vmc .ms{position:relative}#vmc .ms summary{list-style:none;cursor:pointer;border:1px solid #d0d5dd;border-radius:6px;padding:4px 22px 4px 7px;font-size:12.5px;max-width:250px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#fff}" +
     "#vmc .ms summary::-webkit-details-marker{display:none}#vmc .ms summary:after{content:'▾';position:absolute;right:7px;top:4px;color:#667085}" +
@@ -395,10 +395,10 @@
   }
   function baseName() { var d = V.data; return ("밸류맵_" + short(d.subject.address) + "_" + d.config.years[0] + "-" + d.config.years[d.config.years.length - 1]).replace(/[\\/:*?"<>|\s]+/g, "_"); }
   // ── '지도 열기' 화면: 위 지도(일반/위성/지적편집도, 배경 투명도, 번호 색, 크게 보기) + 아래 표(표 복사)
-  //   지도 화면 코드는 mapPage 함수 그대로 새 문서에 넣는다(문자열로 잇지 않아 고치기 쉽다). 번호 색 기본 PwC 주황 #FD5108.
+  //   지도 화면 코드는 mapPage 함수 그대로 새 문서에 넣는다(문자열로 잇지 않아 고치기 쉽다). 번호 색 기본 테라코타 주황 #D9653B(2026-10-20).
   function mapPage(P, R, TSV) {
-    var C = "#FD5108";
-    try { C = localStorage.getItem("vmMapPinColor") || C; } catch (e) {}
+    var C = "#D9653B";
+    try { var sc = localStorage.getItem("vmMapPinColor"); if (sc && sc.toLowerCase() !== "#fd5108") C = sc; } catch (e) {}   // 예전 기본색은 새 기본으로
     var crs = new L.Proj.CRS("EPSG:5181", "+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=500000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs",
       { resolutions: [2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5, 0.25], origin: [-30000, -60000],
         bounds: L.bounds([-30000 - Math.pow(2, 19) * 4, -60000], [-30000 + Math.pow(2, 19) * 5, -60000 + Math.pow(2, 19) * 5]) });
@@ -432,7 +432,7 @@
     }
     var col = document.getElementById("col"); col.value = C;
     col.oninput = function () { C = col.value; try { localStorage.setItem("vmMapPinColor", C); } catch (e) {} draw(); };
-    document.getElementById("col0").onclick = function () { col.value = "#FD5108"; col.oninput(); };
+    document.getElementById("col0").onclick = function () { col.value = "#D9653B"; col.oninput(); };
     draw();
     if (R && P.length) L.circle([P[0].lat, P[0].lng], { radius: R * 1000, color: "#e5383b", weight: 1.5, dashArray: "6 6", fill: false }).addTo(m);
     if (g.length > 1) m.fitBounds(g, { padding: [30, 30] }); else if (g.length) m.setView(g[0], 11); else m.setView([37.5665, 126.978], 7);   // 좌표가 없어도 빈 화면이 되지 않게
@@ -468,21 +468,21 @@
       '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">' +
       ["leaflet/1.9.4/leaflet.min.js", "proj4js/2.11.0/proj4.min.js", "proj4leaflet/1.0.2/proj4leaflet.min.js"].map(function (u) { return '<script src="https://cdnjs.cloudflare.com/ajax/libs/' + u + '"></scr' + 'ipt>'; }).join("") +
       "<style>body{margin:0;font:13px/1.5 'Malgun Gothic',sans-serif;color:#1d2433;background:#f6f7f9}header{padding:14px 18px;background:#fff;border-bottom:1px solid #e4e7ec}h1{font-size:18px;margin:0 0 4px}" +
-      ".kpi{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:6px}.kpi b{color:#c2410c}" +
+      ".kpi{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:6px}.kpi b{color:#A04626}" +
       "#mapbox{position:relative;height:58vh;background:#fff}#mapbox.big{position:fixed;inset:0;height:auto;z-index:9999}#mapbox:fullscreen{height:100vh}#map{position:absolute;inset:0}" +
       ".wrap{padding:12px 18px}.tbar{display:flex;align-items:center;gap:8px;margin-bottom:6px}.tbar b{flex:1;font-size:14px}" +
       "button{font:inherit;cursor:pointer}.btn{border:1px solid #d0d5dd;background:#fff;border-radius:6px;padding:4px 10px}.btn:hover{background:#f2f4f7}" +
       "table{border-collapse:collapse;width:100%;background:#fff;font-size:12px}th,td{border:1px solid #e4e7ec;padding:4px 6px;white-space:nowrap}th{background:#f2f4f7}td.no{font-weight:700}" +
       "td.note{white-space:normal}tr.subj td{background:#fff7d6}tr.out td{color:#98a2b3}.pin{border-radius:50%;font-weight:700;font-size:11px;text-align:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);box-sizing:border-box}" +
       ".lay{position:absolute;z-index:1000;top:10px;right:10px;display:flex;flex-direction:column;gap:6px;align-items:flex-end}.lay>div{background:#fff;border-radius:6px;padding:4px 6px;box-shadow:0 1px 4px rgba(0,0,0,.3);display:flex;align-items:center;gap:6px}" +
-      ".lay button[data-l]{border:0;background:#fff;padding:4px 8px;border-radius:4px}.lay button.on{background:#FD5108;color:#fff}.lay input[type=range]{width:110px;accent-color:#FD5108}" +
+      ".lay button[data-l]{border:0;background:#fff;padding:4px 8px;border-radius:4px}.lay button.on{background:#D9653B;color:#fff}.lay input[type=range]{width:110px;accent-color:#D9653B}" +
       ".lay input[type=color]{width:28px;height:22px;padding:0;border:1px solid #d0d5dd;border-radius:4px;background:#fff}.lay .lk{border:0;background:none;color:#667085;text-decoration:underline;font-size:12px;padding:0}</style></head><body>" +
       "<header><h1>" + esc(sr.jibun) + " 주변 실거래 비교사례</h1><div>" + esc(scopeText(d)) + " · 출처 밸류맵(valueupmap.com) " + d.generatedAt.slice(0, 10) + " 조회</div>" +
       '<div class="kpi"><span>비교사례 <b>' + st.n + "건</b></span><span>토지단가 <b>" + rangeText(st.land) + "</b></span><span>연면적단가 <b>" + rangeText(st.bldg) + "</b></span></div></header>" +
       '<div id="mapbox"><div id="map"></div><div class="lay">' +
       '<div><button class="on" data-l="0">일반</button><button data-l="1">위성</button><button data-l="2">지적편집도</button></div>' +
       '<div>배경 투명도 <input id="tr" type="range" min="0" max="90" step="5" value="0"><span id="tro">0%</span></div>' +
-      '<div>번호 색 <input id="col" type="color" value="#FD5108" title="동그라미 번호 색"><button id="col0" class="lk" title="PwC 주황으로">기본색</button></div>' +
+      '<div>번호 색 <input id="col" type="color" value="#D9653B" title="동그라미 번호 색"><button id="col0" class="lk" title="기본색으로">기본색</button></div>' +
       '<div><button id="fs" class="btn" style="border:0">⛶ 지도 크게 보기</button></div></div></div>' +
       '<div class="wrap"><div class="tbar"><b>비교사례 표</b><button id="cp" class="btn">표 복사</button></div><table><thead><tr>' + body[0].map(function (h) { return "<th>" + esc(h) + "</th>"; }).join("") + "</tr></thead><tbody>" +
       body.slice(1).map(function (c, i) { return '<tr class="' + (i === 0 ? "subj" : (c[1] === "N" ? "out" : "")) + '">' + c.map(function (v, k) { return "<td" + (k === 13 ? ' class="note"' : k === 0 ? ' class="no"' : "") + ">" + esc(v) + "</td>"; }).join("") + "</tr>"; }).join("") +
