@@ -96,6 +96,8 @@
     "#emp .msg{min-height:16px;font-size:12px;color:#b45309}#emp table{border-collapse:collapse;width:100%;font-size:12px}" +
     "#emp th,#emp td{border-bottom:1px solid #eaecf0;padding:4px 5px;text-align:left;white-space:nowrap}#emp th{background:#f6f7f9;position:sticky;top:0}" +
     "#emp td.n,#emp th.n{text-align:right}#emp td.z{white-space:normal;min-width:86px;max-width:130px}#emp tbody tr{cursor:pointer}#emp tbody tr:hover td{background:#f3f6fb}#emp tr.sel td{background:#fff7d6}" +
+    "#emp .gr{display:inline-block;width:12px;margin-right:3px;color:#b0b7c3;cursor:grab;font-size:13px;user-select:none}#emp tr:hover .gr{color:#475467}" +
+    "#emp tr.drag td{opacity:.35}#emp tr.drb td{box-shadow:inset 0 3px 0 var(--emp-c,#FD5108)}#emp tr.dra td{box-shadow:inset 0 -3px 0 var(--emp-c,#FD5108)}" +
     "#emp tfoot td{font-weight:700;background:#f6f7f9}#emp .no{display:inline-block;min-width:19px;height:19px;line-height:19px;border-radius:10px;background:var(--emp-c,#FD5108);color:#fff;text-align:center;font-size:11px;font-weight:700}" +
     "#emp .sw{display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-weight:600}#emp .sw input{position:absolute;opacity:0;width:0;height:0}" +
     "#emp .sw i{position:relative;width:24px;height:14px;border-radius:7px;background:#d0d5dd;transition:background .15s}" +
@@ -229,7 +231,7 @@
       if (p.area && p.price) val += p.area * p.price; else noPrice++;
       var tr = document.createElement("tr");
       if (p.pnu === E.sel) tr.className = "sel";
-      tr.innerHTML = "<td><span class=no>" + (i + 1) + "</span></td><td title='" + esc(p.address) + "'>" + esc(p.jibun) + "</td><td>" + esc(p.jimok) +
+      tr.innerHTML = "<td><span class=gr title='끌어서 순서 바꾸기'>⠿</span><span class=no>" + (i + 1) + "</span></td><td title='" + esc(p.address) + "'>" + esc(p.jibun) + "</td><td>" + esc(p.jimok) +
         "</td><td class=n>" + fmt(p.area) + "</td><td class=n>" + fmt(p.area * 0.3025, 1) + "</td><td class=z>" + esc(p.zone || "") +
         "</td><td class=n title='" + esc(p.priceYm || "") + "'>" + fmt(p.price) + "</td><td><button class=x title='빼기'>×</button></td>";
       tr.onclick = function (e) {   // 고른 행을 다시 누르면 노란 표시를 끈다(지도 이동 없음)
@@ -237,6 +239,23 @@
         if (E.sel === p.pnu) { E.sel = null; render(); return; }
         E.sel = p.pnu; render(); zoomTo([p.feature]);
       };
+      // 끌어다 놓기로 순서 바꾸기(2026-10-19 사용자 요청): 행 위쪽 반에 놓으면 그 앞, 아래쪽 반이면 그 뒤. 번호·이름표·표 복사 순서가 같이 바뀐다
+      tr.draggable = true;
+      tr.addEventListener("dragstart", function (e) { E.drag = i; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", p.jibun); tr.classList.add("drag"); });
+      tr.addEventListener("dragend", function () { E.drag = null; unmark(); });
+      tr.addEventListener("dragover", function (e) {
+        if (E.drag == null) return; e.preventDefault();
+        var r = tr.getBoundingClientRect(); unmark(); tr.classList.add(e.clientY > r.top + r.height / 2 ? "dra" : "drb");
+      });
+      tr.addEventListener("drop", function (e) {
+        if (E.drag == null) return; e.preventDefault();
+        var r = tr.getBoundingClientRect(), to = i + (e.clientY > r.top + r.height / 2 ? 1 : 0), from = E.drag;
+        E.drag = null; unmark();
+        if (to > from) to--;
+        if (to === from) return render();
+        var it = E.list.splice(from, 1)[0]; E.list.splice(to, 0, it);
+        render(); msg(it.jibun + " → " + (to + 1) + "번");
+      });
       tb.appendChild(tr);
     });
     $p(".cnt").textContent = E.list.length + "필지 합계";
@@ -247,6 +266,7 @@
     sv.title = "면적(㎡) × 공시지가(원/㎡) 합계" + (noPrice ? " · 공시지가나 면적이 없는 " + noPrice + "필지는 빠짐" : "");
     try { localStorage.setItem(KEY, JSON.stringify(E.list.map(function (p) { return p.pnu; }))); } catch (e) {}
   }
+  function unmark() { Array.prototype.forEach.call(P.querySelectorAll(".drag,.dra,.drb"), function (x) { x.classList.remove("drag", "dra", "drb"); }); }
   function zoomTo(fs) {
     if (!fs.length) return;
     var ext = ol.extent.createEmpty();
