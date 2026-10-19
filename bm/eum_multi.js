@@ -55,7 +55,7 @@
 
   // ── 배경지도: 토지이음 도면 아래에 위성/일반지도를 깔고 도면층(ol.layer.Tile)을 흐리게 한다.
   // 카카오 타일은 EPSG:5181 이라 OL 래스터 재투영으로 5179 에 맞춘다. CORS 헤더가 없어 캔버스가 오염된다
-  // → 토지이음 '저장'(canvas.toBlob)이 막히고, 새로고침 전까지 풀리지 않는다. Esri 위성은 CORS 허용이라 저장이 된다.
+  // → 토지이음 '저장'(canvas.toBlob)이 막히고, 새로고침 전까지 풀리지 않는다. (Esri 위성은 2026-10-19 사용자 요청으로 뺐다.)
   proj4.defs("EPSG:5181", "+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=500000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
   ol.proj.get("EPSG:5181").setExtent([-30000 - 524288 * 4, -60000, -30000 + 524288 * 5, -60000 + 524288 * 5]);
   var kgrid = new ol.tilegrid.TileGrid({ origin: [-30000, -60000], resolutions: [2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5, 0.25], tileSize: 256 });
@@ -66,12 +66,10 @@
   var MTS = "https://mts.kakaocdn.net/api/v1/tile/";
   var BG = {
     none: [],
-    esri: [new ol.layer.Tile({ source: new ol.source.XYZ({ crossOrigin: "anonymous", maxZoom: 19,
-      url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" }) })],
     ksky: [kakao("https://map.kakaocdn.net/map_skyview_hd/L{z}/{y}/{x}.jpg?v=160107"), kakao(MTS + "PNG_SKYH02/v24_kikr3/latest/{z}/{y}/{x}.png")],
     kmap: [kakao(MTS + "PNG02/v26_blse3/latest/{z}/{y}/{x}.png")]
   };
-  var bgAll = [].concat(BG.esri, BG.ksky, BG.kmap);
+  var bgAll = [].concat(BG.ksky, BG.kmap);
   E.bg = "none"; E.op = 100;
   function eumTiles() { return map.getLayers().getArray().filter(function (l) { return l instanceof ol.layer.Tile && bgAll.indexOf(l) < 0; }); }
   function applyBg() {
@@ -88,11 +86,11 @@
   // ── 패널
   var css = document.createElement("style");
   css.textContent = "#emp{position:fixed;left:16px;bottom:16px;z-index:2147483000;width:600px;max-width:calc(100vw - 32px);max-height:72vh;display:flex;flex-direction:column;background:#fff;color:#1d2433;border:1px solid #d0d5dd;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.25);font:13px/1.45 'Malgun Gothic',sans-serif}" +
-    "#emp *{box-sizing:border-box;font-family:inherit}#emp .hd{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#1d4ed8;color:#fff;border-radius:10px 10px 0 0;cursor:move;user-select:none}" +
+    "#emp *{box-sizing:border-box;font-family:inherit}#emp .hd{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#FD5108;color:#fff;border-radius:10px 10px 0 0;cursor:move;user-select:none}" +
     "#emp .hd b{flex:1;font-size:14px}#emp .hd button{background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0 4px}" +
     "#emp .bd{padding:8px 10px;display:flex;flex-direction:column;gap:6px;overflow:auto}#emp textarea{width:100%;height:58px;resize:vertical;border:1px solid #d0d5dd;border-radius:6px;padding:5px 7px;font-size:12.5px}" +
     "#emp .row{display:flex;gap:5px;flex-wrap:wrap}#emp .row button{padding:5px 9px;border:1px solid #d0d5dd;background:#fff;border-radius:6px;cursor:pointer;font-size:12.5px}" +
-    "#emp .row button.pri{background:#1d4ed8;border-color:#1d4ed8;color:#fff}#emp .row button.on{background:#fee2e2;border-color:#e5383b;color:#b91c1c;font-weight:700}" +
+    "#emp .row button.pri{background:#FD5108;border-color:#FD5108;color:#fff}#emp .row button.on{background:#fee2e2;border-color:#e5383b;color:#b91c1c;font-weight:700}" +
     "#emp .msg{min-height:16px;font-size:12px;color:#b45309}#emp table{border-collapse:collapse;width:100%;font-size:12px}" +
     "#emp th,#emp td{border-bottom:1px solid #eaecf0;padding:4px 5px;text-align:left;white-space:nowrap}#emp th{background:#f6f7f9;position:sticky;top:0}" +
     "#emp td.n,#emp th.n{text-align:right}#emp td.z{white-space:normal;min-width:86px;max-width:130px}#emp tbody tr{cursor:pointer}#emp tbody tr:hover td{background:#f3f6fb}#emp tr.sel td{background:#fff7d6}" +
@@ -102,7 +100,7 @@
     "#emp .sw{display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-weight:600}#emp .sw input{position:absolute;opacity:0;width:0;height:0}" +
     "#emp .sw i{position:relative;width:24px;height:14px;border-radius:7px;background:#d0d5dd;transition:background .15s}" +
     "#emp .sw i:after{content:'';position:absolute;left:2px;top:2px;width:10px;height:10px;border-radius:50%;background:#fff;transition:left .15s}" +
-    "#emp .sw input:checked+i{background:#1d4ed8}#emp .sw input:checked+i:after{left:12px}#emp .sw input:focus-visible+i{outline:2px solid #93c5fd}" +
+    "#emp .sw input:checked+i{background:#FD5108}#emp .sw input:checked+i:after{left:12px}#emp .sw input:focus-visible+i{outline:2px solid #fdba8c}" +
     "#emp .x{border:none;background:none;color:#98a2b3;font-size:15px;cursor:pointer}#emp .x:hover{color:#e5383b}#emp .tw{overflow:auto;max-height:34vh}" +
     "#emp .bgrow{align-items:center;gap:12px;font-size:12.5px}#emp .bgrow select{font-size:12.5px;padding:3px}#emp .bgrow input{vertical-align:middle;width:110px}" +
     "#emp .bgrow input[type=color]{width:30px;height:22px;padding:0 1px;border:1px solid #d0d5dd;border-radius:4px;cursor:pointer;background:#fff}#emp .bgrow .rs{border:none;background:none;color:#667085;font-size:11.5px;cursor:pointer;text-decoration:underline;padding:0}" +
@@ -116,7 +114,7 @@
     '<div class="row"><button class="pri" data-a="add">목록 추가</button><button data-a="pick">지도 클릭으로 고르기</button><button data-a="fit">전체 보기</button>' +
     '<button data-a="copy">표 복사</button><button data-a="link">링크 복사</button><button data-a="clear">모두 지우기</button></div>' +
     '<div class="row bgrow"><label>배경 <select data-x="bg"><option value="none">토지이음 도면만</option><option value="ksky">카카오 위성</option>' +
-    '<option value="esri">Esri 위성 (저장 단추 됨)</option><option value="kmap">카카오 일반지도</option></select></label>' +
+    '<option value="kmap">카카오 일반지도</option></select></label>' +
     '<label>도면 진하기 <input type="range" data-x="op" min="0" max="100" step="5" value="100"> <output>100%</output></label>' +
     '<label>필지 색 <input type="color" data-x="color" value="' + E.color + '"></label><button class="rs" data-a="color0" title="PwC 주황으로 되돌리기">기본색</button></div>' +
     '<div class="msg" role="status"></div><div class="tw"><table><thead><tr><th><label class="sw" title="지도에 번호 표시 켜기/끄기">#<input type="checkbox" data-x="showNo" checked><i></i></label></th><th><label class="sw" title="지도에 지번 표시 켜기/끄기">지번<input type="checkbox" data-x="showJibun" checked><i></i></label></th><th>지목</th><th class="n">면적(㎡)</th><th class="n">평</th><th>용도지역</th><th class="n" title="원/㎡">공시지가</th><th></th></tr></thead>' +
@@ -353,7 +351,7 @@
     if (E.bg === "none") setOp(100); else if (E.op > 70) setOp(45);
     applyBg();
     try { localStorage.setItem(KEY + "Bg", JSON.stringify([E.bg, E.op])); } catch (e) {}
-    msg(E.bg.charAt(0) === "k" ? "카카오 배경을 쓰면 토지이음 '저장' 단추가 막힙니다(새로고침하면 풀림). 그림 파일이 필요하면 Esri 위성을 고르거나 Win+Shift+S 로 캡처하세요." : "");
+    msg(E.bg.charAt(0) === "k" ? "카카오 배경을 쓰면 토지이음 '저장' 단추가 막힙니다(새로고침하면 풀림). 그림 파일이 필요하면 Win+Shift+S 로 캡처하세요." : "");
   };
   rng.oninput = function () { setOp(rng.value); };
   // 필지 색
