@@ -53,7 +53,7 @@
     "#vmc th{background:#f6f7f9;position:sticky;top:0}#vmc td.n,#vmc th.n{text-align:right}#vmc tr.subj td{background:#fff7d6}#vmc tr.out td{color:#98a2b3}" +
     "#vmc td.note{white-space:normal;min-width:300px;font-size:11.5px;color:#b45309}#vmc a{color:#D9653B}#vmc .tw{overflow:auto;flex:1 1 auto;min-height:170px;max-height:none;border:1px solid #eaecf0;border-radius:6px}" +
     "#vmc.min .bd{display:none}#vmc .hint{font-size:11.5px;color:#667085}" +
-    "#vmc .hd .rz{cursor:nwse-resize;font-size:15px;line-height:1;padding:0 2px;opacity:.85;user-select:none}#vmc .hd .rz:hover{opacity:1}" +
+    "#vmc .hd .rz{cursor:nwse-resize;font-size:15px;line-height:1;padding:4px 4px;margin:-4px 0 -4px -6px;opacity:0;transition:opacity .15s;user-select:none}#vmc .hd .rz:hover,#vmc .hd .rz:active{opacity:1}" +
     "#vmc .row button.hl{border-color:#D9653B;color:#D9653B;font-weight:700;box-shadow:0 0 0 2px #FBEFE9}" +
     "#vmc th button.so{border:0;background:none;color:#98a2b3;font-size:10px;cursor:pointer;padding:0 0 0 3px}#vmc th button.so.on{color:#D9653B}#vmc th button.so:hover{color:#1d2433}" +
     "#vmc .gr{color:#b0b7c3;cursor:grab;margin-right:4px;user-select:none}#vmc tr:hover .gr{color:#475467}#vmc tr.dra td{box-shadow:inset 0 -3px 0 #D9653B}#vmc tr.drb td{box-shadow:inset 0 3px 0 #D9653B}" +
@@ -214,29 +214,22 @@
     };
   }
 
-  // ── 공시지가(2026-10-22): /api/properties/{pnu}/official-prices (로그인해야 응답 — 로그인 없이는 401). 응답 모양을 직접 확인하지 못해서
-  //   어디에 있든 '연도(또는 날짜) + ㎡당 가격' 짝을 찾아 {연도: 원/㎡} 로 만든다(평당만 있으면 ㎡당으로 바꿈). 못 읽으면 null → 표 칸은 빈칸.
+  // ── 거래 당시 공시지가(2026-10-22): 토지이음 연도별 공시지가 luLandDetYearAjax.jsp?pnu= (EUC-KR, Access-Control-Allow-Origin: * —
+  //   밸류맵 화면에서 불러도 된다. Referer 가 아예 없으면 빈 응답이라 브라우저 기본 referrer 로 부른다). 밸류맵 /api/properties/{pnu}/official-prices 는
+  //   멤버십이 없으면 403 이라 쓰지 않는다. 결과 {연도: 원/㎡}, 못 받으면 null → 표 칸은 빈칸.
   async function officialPrices(pnu) {
     try {
-      var r = await fetch("/api/properties/" + pnu + "/official-prices"); if (!r.ok) return null;
-      var out = {}, walk = function (o) {
-        if (Array.isArray(o)) { o.forEach(walk); return; }
-        if (!o || typeof o !== "object") return;
-        var ks = Object.keys(o);
-        var yk = ks.find(function (k) { return /year|date|base|standard|ym/i.test(k) && /^\d{4}/.test(String(o[k])); });
-        var pm = ks.find(function (k) { return /price|value|amount/i.test(k) && !/pyeong/i.test(k) && typeof o[k] === "number" && o[k] > 0; });
-        var pp = ks.find(function (k) { return /pyeong/i.test(k) && typeof o[k] === "number" && o[k] > 0; });
-        if (yk && (pm || pp)) { var y = +String(o[yk]).slice(0, 4); if (y > 1989 && y < 2100) out[y] = pm ? o[pm] : o[pp] * M2P; }
-        ks.forEach(function (k) { if (o[k] && typeof o[k] === "object") walk(o[k]); });
-      };
-      walk(await r.json());
+      var r = await fetch("https://www.eum.go.kr/web/ar/lu/luLandDetYearAjax.jsp?pnu=" + pnu, { referrerPolicy: "strict-origin-when-cross-origin" });
+      if (!r.ok) return null;
+      var h = new TextDecoder("euc-kr").decode(await r.arrayBuffer()), out = {}, m, re = /(\d{4})\/\d{2}\s*<\/td>\s*<td>\s*([\d,]+)\s*원/g;
+      while ((m = re.exec(h))) out[+m[1]] = +m[2].replace(/,/g, "");
       return Object.keys(out).length ? out : null;
     } catch (e) { return null; }
   }
-  // 거래 당시 공시지가: 1월 1일 기준·5월 말 공시 → 1~5월 거래는 전년도, 6월부터 그해. 없으면 그 해보다 앞선 가장 가까운 해
+  // 거래 당시 공시지가 = 거래한 해의 공시지가(그해 1월 1일 기준). 없으면 그 해보다 앞선 가장 가까운 해
   function officialAt(off, date) {
     if (!off || !date) return null;
-    var y = +date.slice(0, 4), m = +date.slice(5, 7), want = m >= 6 ? y : y - 1;
+    var want = +date.slice(0, 4);
     if (off[want]) return off[want];
     var ys = Object.keys(off).map(Number).filter(function (v) { return v <= want; }).sort(function (a, b) { return b - a; });
     return ys.length ? off[ys[0]] : null;
@@ -244,7 +237,6 @@
   // 공시지가대비 = ㎡당 토지단가 ÷ ㎡당 공시지가. 해마다 목록이 있으면 거래 당시 값, 없으면 현재 공시지가(now=true → 표에 * 표시)
   var offRatio = function (lot, price, landM2, date) {
     var o = officialAt(lot.official, date), now = false;
-    if (!o && lot.officialNow) { o = lot.officialNow; now = true; }
     return o && price && landM2 ? { x: price / landM2 / o, now: now } : null;
   };
 
@@ -443,7 +435,7 @@
   function cells(r) {
     return [r.no, r.no === "대상" ? "-" : (r.inc ? "Y" : "N"), r.date, r.jibun, r.typ, r.zone, r.price ? fmt(r.price / 1e8, 2) : "",
       r.land ? fmt(r.land * M2P, 1) : "", r.bldg ? fmt(r.bldg * M2P, 1) : "", fmt(unitLand(r)), fmt(unitBldg(r)), r.appr,
-      r.offx ? "x" + fmt(r.offx, 1) + "배" + (r.offNow ? "*" : "") : "", r.dist != null ? fmt(r.dist, 2) : "", r.note];
+      r.offx ? "x" + fmt(r.offx, 1) : "", r.dist != null ? fmt(r.dist, 2) : "", r.note];
   }
 
   function render() {
@@ -454,8 +446,6 @@
       "전체 " + rows.length + "건 중 비교사례 <b>" + st.n + "건</b>" +
       (st.land ? " · 토지단가 평균 <b>" + fmt(st.land.avg) + "</b> (최소 " + fmt(st.land.min) + " ~ 최대 " + fmt(st.land.max) + ") 만원/평" : "") +
       (st.bldg ? " · 연면적단가 평균 <b>" + fmt(st.bldg.avg) + "</b> (최소 " + fmt(st.bldg.min) + " ~ 최대 " + fmt(st.bldg.max) + ") 만원/평" : "") +
-      (su && st.land ? "<br>대상지 가장 최근 거래 내역(" + esc(sr.date) + ") 토지단가 " + fmt(su) + " 만원/평 → 사례 평균은 그 <b>" + fmt(st.land.avg / su, 2) + "배</b>" : "") +
-      (rows.some(function (r) { return r.offNow; }) ? "<br>공시지가대비 * = 거래 당시가 아니라 현재 공시지가(" + esc((rows.find(function (r) { return r.offYm; }) || {}).offYm || "") + " 기준)로 계산 — 해마다 공시지가는 밸류맵 멤버십이 있어야 받습니다" : "") +
       (d.meta.parseFailures.length ? "<br>상세를 못 읽은 필지 " + d.meta.parseFailures.length + "개 — 다시 수집하거나 직접 확인" : "");
     var link = function (r) { return '<a href="/properties/trades/' + r.pnu + '" target="_blank" rel="noopener">' + esc(r.jibun) + "</a>"; };
     var tr = function (r, cls) {

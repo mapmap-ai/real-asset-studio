@@ -60,7 +60,8 @@
   ol.proj.get("EPSG:5181").setExtent([-30000 - 524288 * 4, -60000, -30000 + 524288 * 5, -60000 + 524288 * 5]);
   var kgrid = new ol.tilegrid.TileGrid({ origin: [-30000, -60000], resolutions: [2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5, 0.25], tileSize: 256 });
   var kakao = function (tpl) {   // 카카오 레벨 = 14 - OL z, y 는 아래→위(OL3 와 같은 방향)
-    return new ol.layer.Tile({ source: new ol.source.TileImage({ projection: "EPSG:5181", tileGrid: kgrid,
+    // 카카오 조각은 512×512(2배 해상도, 2026-10-22 확인) → tilePixelRatio 2. 빼면 256 으로 줄였다가 좌표계를 바꾸며 흐려진다
+    return new ol.layer.Tile({ source: new ol.source.TileImage({ projection: "EPSG:5181", tileGrid: kgrid, tilePixelRatio: 2, reprojectionErrorThreshold: 0.25,
       tileUrlFunction: function (tc) { return tpl.replace("{z}", 14 - tc[0]).replace("{x}", tc[1]).replace("{y}", tc[2]); } }) });
   };
   var MTS = "https://mts.kakaocdn.net/api/v1/tile/";
@@ -101,7 +102,7 @@
     "#emp .hd b{flex:1;font-size:14px}#emp .hd button{background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0 4px}" +
     "#emp .bd{padding:8px 10px;display:flex;flex-direction:column;gap:6px;overflow:auto}#emp textarea{width:100%;height:58px;resize:vertical;border:1px solid #d0d5dd;border-radius:6px;padding:5px 7px;font-size:12.5px}" +
     "#emp .row{display:flex;gap:5px;flex-wrap:wrap}#emp .row button{padding:5px 9px;border:1px solid #d0d5dd;background:#fff;border-radius:6px;cursor:pointer;font-size:12.5px}" +
-    "#emp .row button.pri{background:#D9653B;border-color:#D9653B;color:#fff}#emp .row button.on{background:#fee2e2;border-color:#e5383b;color:#b91c1c;font-weight:700}" +
+    "#emp .row button.pri{background:#D9653B;border-color:#D9653B;color:#fff}#emp .row button.pri2{border-color:#D9653B;color:#D9653B;font-weight:700}#emp .row button.on{background:#fee2e2;border-color:#e5383b;color:#b91c1c;font-weight:700}" +
     "#emp .msg{min-height:16px;font-size:12px;color:#b45309}#emp table{border-collapse:collapse;width:100%;font-size:12px}" +
     "#emp th,#emp td{border-bottom:1px solid #eaecf0;padding:4px 5px;text-align:left;white-space:nowrap}#emp th{background:#f6f7f9;position:sticky;top:0}" +
     "#emp td.n,#emp th.n{text-align:right}#emp td.z{white-space:normal;min-width:86px;max-width:130px}#emp tbody tr{cursor:pointer}#emp tbody tr:hover td{background:#f3f6fb}#emp tr.sel td{background:#fff7d6}" +
@@ -123,7 +124,7 @@
   P.innerHTML = '<div class="hd"><b>여러 필지 선택</b><button data-a="min" title="접기">–</button><button data-a="close" title="닫기">×</button></div>' +
     '<div class="bd"><textarea placeholder="지번을 한 줄에 하나씩 (예: 용산구 한강로2가 424) · PNU 19자리도 됩니다"></textarea>' +
     '<div class="row"><button class="pri" data-a="add">목록 추가</button><button data-a="stopadd" class="on" hidden>추가 멈춤</button><button data-a="pick">지도 클릭으로 고르기</button><button data-a="fit">전체 보기</button>' +
-    '<button data-a="copy">표 복사</button><button data-a="link">링크 복사</button><button data-a="clear">모두 지우기</button></div>' +
+    '<button data-a="mapopen" class="pri2" title="칠한 필지를 새 창의 선명한 카카오 지도 위에 — 캡처하기 좋게">지도 열기</button><button data-a="copy">표 복사</button><button data-a="link">링크 복사</button><button data-a="clear">모두 지우기</button></div>' +
     '<div class="row bgrow"><label>배경 <select data-x="bg"><option value="none">토지이음 도면만</option><option value="kmap">카카오 지도</option>' +
     '<option value="ksky">카카오 위성</option></select></label>' +
     '<label><span data-x="opl">도면 진하기</span> <input type="range" data-x="op" min="0" max="100" step="5" value="100"> <output>100%</output></label>' +
@@ -276,6 +277,113 @@
     try { localStorage.setItem(KEY, JSON.stringify(E.list.map(function (p) { return p.pnu; }))); } catch (e) {}
   }
   function unmark() { Array.prototype.forEach.call(P.querySelectorAll(".drag,.dra,.drb"), function (x) { x.classList.remove("drag", "dra", "drb"); }); }
+  // ── '지도 열기'(2026-10-22 사용자 요청: 캡처용). 칠한 필지 경계(EPSG:5179)를 WGS84 로 바꿔 새 창에 넘기고, 그 창에서 카카오 지도(원래 좌표계
+  //   EPSG:5181, 512px 고해상도 조각)를 Leaflet 으로 깔아 다시 그린다 — 토지이음 화면처럼 좌표계를 바꿔 그리며 흐려지는 일이 없다.
+  //   확대·축소는 0.25 단계(+/− 단추, 휠도 잘게), 필지에 맞추기, 지도 크게 보기(전체 화면), 배경 투명도, 필지 색, 번호·지번 이름표, 아래 표·표 복사.
+  //   지도 화면 코드는 eumMapPage 함수 그대로 새 문서에 넣는다(문자열로 잇지 않아 고치기 쉽다).
+  function eumMapPage(D) {
+    var C = D.color, showNo = true, showJb = true;
+    var crs = new L.Proj.CRS("EPSG:5181", "+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=500000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs",
+      { resolutions: [2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5, 0.25], origin: [-30000, -60000],
+        bounds: L.bounds([-30000 - Math.pow(2, 19) * 4, -60000], [-30000 + Math.pow(2, 19) * 5, -60000 + Math.pow(2, 19) * 5]) });
+    var K = function (u) { return L.tileLayer(u, { minZoom: 0, maxZoom: 13, maxNativeZoom: 13, zoomReverse: true, zoomOffset: 1, tms: true, continuousWorld: true, attribution: "지도 &copy; Kakao · 경계 토지이음" }); };
+    var T = "https://mts.kakaocdn.net/api/v1/tile/";
+    var B = { map: [K(T + "PNG02/v26_blse3/latest/{z}/{y}/{x}.png")],
+      sky: [K("https://map.kakaocdn.net/map_skyview_hd/L{z}/{y}/{x}.jpg?v=160107"), K(T + "PNG_SKYH02/v24_kikr3/latest/{z}/{y}/{x}.png")],
+      cad: [K(T + "PNG02/v26_blse3/latest/{z}/{y}/{x}.png"), K(T + "PNG_CAD02/v22_53657/latest/{z}/{y}/{x}.png")], none: [] };
+    var m = L.map("map", { crs: crs, zoomSnap: 0.25, zoomDelta: 0.25, wheelPxPerZoomLevel: 180, zoomControl: false }), cur = [], op = 1;
+    function base(k) { cur.forEach(function (l) { m.removeLayer(l); }); cur = B[k]; cur.forEach(function (l, i) { l.addTo(m); l.setZIndex(i + 1); l.setOpacity(op); }); }
+    var g = L.layerGroup().addTo(m), shapes = [];
+    function draw() {
+      g.clearLayers(); shapes = [];
+      D.parcels.forEach(function (p, i) {
+        var ly = L.geoJSON(p.geo, { style: { color: C, weight: 2.5, fillColor: C, fillOpacity: 0.28 } }).addTo(g);
+        var lab = [showNo ? String(i + 1) + (showJb ? "." : "") : "", showJb ? p.jibun : ""].join(showNo && showJb ? " " : "");
+        if (lab) ly.bindTooltip(lab, { permanent: true, direction: "center", className: "plb" });
+        ly.bindPopup("<b>" + (i + 1) + ". " + p.jibun + "</b><br>" + (p.jimok || "") + " · " + (p.area ? p.area.toLocaleString() + "㎡" : "") + "<br>" + (p.zone || "") + (p.price ? " · 공시지가 " + p.price.toLocaleString() + "원/㎡" : ""));
+        shapes.push(ly);
+      });
+      document.querySelectorAll("td.no span").forEach(function (s) { s.style.background = C; });
+    }
+    function fit() { var b = L.featureGroup(shapes).getBounds(); if (b.isValid()) m.fitBounds(b, { padding: [40, 40] }); else m.setView([37.5665, 126.978], 7); }
+    base(D.bg || "map"); draw(); fit();
+    var $ = function (id) { return document.getElementById(id); };
+    $("bg").value = D.bg || "map"; $("bg").onchange = function () { base(this.value); };
+    $("tr").oninput = function () { op = 1 - this.value / 100; $("tro").textContent = this.value + "%"; cur.forEach(function (l) { l.setOpacity(op); }); };
+    $("col").value = C; $("col").oninput = function () { C = this.value; draw(); };
+    $("sno").onchange = function () { showNo = this.checked; draw(); };
+    $("sjb").onchange = function () { showJb = this.checked; draw(); };
+    $("zin").onclick = function () { m.setZoom(m.getZoom() + 0.25); };
+    $("zout").onclick = function () { m.setZoom(m.getZoom() - 0.25); };
+    $("zfit").onclick = fit;
+    m.on("zoomend", function () { $("zl").textContent = m.getZoom().toFixed(2); }); $("zl").textContent = m.getZoom().toFixed(2);
+    var box = $("mapbox"), fsb = $("fs");
+    function fsOn() { return document.fullscreenElement === box || box.classList.contains("big"); }
+    function sync() { fsb.textContent = fsOn() ? "✕ 작게 보기" : "⛶ 지도 크게 보기"; setTimeout(function () { m.invalidateSize(); }, 150); }
+    fsb.onclick = function () {
+      if (fsOn()) { if (document.fullscreenElement) document.exitFullscreen(); else box.classList.remove("big"); }
+      else if (box.requestFullscreen) box.requestFullscreen().catch(function () { box.classList.add("big"); sync(); });
+      else box.classList.add("big");
+      sync();
+    };
+    document.addEventListener("fullscreenchange", sync);
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && box.classList.contains("big")) { box.classList.remove("big"); sync(); } });
+    $("cp").onclick = function () {
+      var b = this, done = function () { b.textContent = "복사했습니다 ✓"; setTimeout(function () { b.textContent = "표 복사"; }, 1500); };
+      var old = function () { var t = document.createElement("textarea"); t.value = D.tsv; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); done(); };
+      if (navigator.clipboard) navigator.clipboard.writeText(D.tsv).then(done, old); else old();
+    };
+  }
+  function openMapWindow() {
+    if (!E.list.length) return msg("칠한 필지가 없습니다.");
+    var gj = new ol.format.GeoJSON(), proj = map.getView().getProjection();
+    var parcels = E.list.map(function (p) {
+      return { jibun: p.jibun, address: p.address || p.jibun, jimok: p.jimok || "", area: p.area || null, zone: p.zone || "", price: p.price || null,
+        geo: gj.writeFeatureObject(p.feature, { featureProjection: proj, dataProjection: "EPSG:4326", decimals: 7 }) };
+    });
+    var sum = 0, val = 0; E.list.forEach(function (p) { sum += +p.area || 0; if (p.area && p.price) val += p.area * p.price; });
+    var head = ["번호", "소재지", "지목", "면적(㎡)", "면적(평)", "용도지역", "공시지가(원/㎡)", "공시지가 합계(백만원)"];
+    var body = E.list.map(function (p, i) { return [i + 1, p.address || p.jibun, p.jimok || "", fmt(p.area), fmt(p.area * 0.3025, 1), p.zone || "", fmt(p.price), p.area && p.price ? fmt(p.area * p.price / 1e6) : ""]; });
+    var foot = ["", E.list.length + "필지 합계", "", fmt(sum), fmt(sum * 0.3025, 1), "", "", fmt(val / 1e6)];
+    var tsv = [head].concat(body, [foot]).map(function (r) { return r.join("\t"); }).join("\n");
+    // 제목: 첫 필지의 동 이름 + 지번(서울특별시 용산구 한강로2가 424번지 → 한강로2가 424)
+    var first = (E.list[0].address || "").replace(/\s+(산\s*)?\d[\d-]*\s*번지?\s*$/, "").trim().split(/\s+/).slice(-1)[0] || "";
+    var title = (first ? first + " " : "") + E.list[0].jibun + (E.list.length > 1 ? " 외 " + (E.list.length - 1) + "필지" : "");
+    var D = { parcels: parcels, color: E.color, bg: E.bg === "ksky" ? "sky" : "map", tsv: tsv };
+    var J = function (v) { return JSON.stringify(v).replace(/</g, "\\u003c"); };
+    var html = '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' + esc(title) + " 위치도</title>" +
+      '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">' +
+      '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">' +
+      ["leaflet/1.9.4/leaflet.min.js", "proj4js/2.11.0/proj4.min.js", "proj4leaflet/1.0.2/proj4leaflet.min.js"].map(function (u) { return '<script src="https://cdnjs.cloudflare.com/ajax/libs/' + u + '"></scr' + "ipt>"; }).join("") +
+      "<style>body{margin:0;font:13px/1.5 'Noto Sans KR','Malgun Gothic',sans-serif;color:#1d2433;background:#f6f7f9}header{padding:12px 18px;background:#fff;border-bottom:1px solid #e4e7ec}" +
+      "h1{font-size:18px;margin:0 0 2px;outline:none}h1:focus{background:#fff7f2}.kpi{display:flex;gap:16px;flex-wrap:wrap;color:#475467}.kpi b{color:#A04626}" +
+      "#mapbox{position:relative;height:66vh;background:#fff}#mapbox.big{position:fixed;inset:0;height:auto;z-index:9999}#mapbox:fullscreen{height:100vh}#map{position:absolute;inset:0;background:#fff}" +
+      ".lay{position:absolute;z-index:1000;top:10px;right:10px;display:flex;flex-direction:column;gap:6px;align-items:flex-end}.lay>div{background:#fff;border-radius:6px;padding:4px 7px;box-shadow:0 1px 4px rgba(0,0,0,.3);display:flex;align-items:center;gap:6px}" +
+      ".lay select,.lay button{font:inherit;font-size:12.5px}.lay button{border:1px solid #d0d5dd;background:#fff;border-radius:5px;padding:2px 8px;cursor:pointer}.lay button:hover{background:#f2f4f7}" +
+      ".lay input[type=range]{width:100px;accent-color:#D9653B}.lay input[type=color]{width:26px;height:22px;padding:0;border:1px solid #d0d5dd;border-radius:4px}" +
+      ".zm{position:absolute;z-index:1000;left:10px;top:10px;display:flex;flex-direction:column;background:#fff;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.3);overflow:hidden}" +
+      ".zm button{border:0;border-bottom:1px solid #eaecf0;background:#fff;width:34px;height:30px;font-size:17px;cursor:pointer}.zm button:hover{background:#fff1ea}.zm span{font-size:10.5px;color:#667085;text-align:center;padding:2px 0}" +
+      ".plb{background:rgba(255,255,255,.92);border:1px solid rgba(0,0,0,.15);border-radius:4px;padding:1px 5px;font-weight:700;font-size:12px;color:#1d2433;box-shadow:none}.plb:before{display:none}" +
+      ".wrap{padding:12px 18px}.tbar{display:flex;align-items:center;gap:8px;margin-bottom:6px}.tbar b{flex:1;font-size:14px}.btn{border:1px solid #d0d5dd;background:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font:inherit}" +
+      "table{border-collapse:collapse;width:100%;background:#fff;font-size:12.5px}th,td{border:1px solid #e4e7ec;padding:4px 7px;white-space:nowrap}th{background:#f2f4f7}td.n{text-align:right}" +
+      "td.no span{display:inline-block;min-width:20px;height:20px;line-height:20px;border-radius:10px;color:#fff;text-align:center;font-size:11px;font-weight:700}tfoot td{font-weight:700;background:#f6f7f9}</style></head><body>" +
+      '<header><h1 contenteditable="true" spellcheck="false" title="눌러서 고칠 수 있음">' + esc(title) + " 위치도</h1>" +
+      '<div class="kpi"><span>' + E.list.length + "필지</span><span>면적 합계 <b>" + fmt(sum) + "㎡</b> (" + fmt(sum * 0.3025, 1) + "평)</span>" +
+      (val ? "<span>공시지가 합계 <b>" + fmt(val / 1e6) + " 백만원</b></span>" : "") + "<span>경계: 토지이음 · 배경: 카카오맵</span></div></header>" +
+      '<div id="mapbox"><div id="map"></div>' +
+      '<div class="zm"><button id="zin" title="확대(0.25단계)">+</button><button id="zout" title="축소(0.25단계)">−</button><button id="zfit" title="필지에 맞추기" style="font-size:13px">⊡</button><span id="zl"></span></div>' +
+      '<div class="lay"><div>배경 <select id="bg"><option value="map">카카오 지도</option><option value="sky">카카오 위성</option><option value="cad">지적편집도</option><option value="none">흰 바탕</option></select></div>' +
+      '<div>배경 투명도 <input id="tr" type="range" min="0" max="90" step="5" value="0"><span id="tro">0%</span></div>' +
+      '<div>필지 색 <input id="col" type="color"> <label><input id="sno" type="checkbox" checked>번호</label> <label><input id="sjb" type="checkbox" checked>지번</label></div>' +
+      '<div><button id="fs">⛶ 지도 크게 보기</button></div></div></div>' +
+      '<div class="wrap"><div class="tbar"><b>필지 표</b><button id="cp" class="btn">표 복사</button></div><table><thead><tr>' + head.map(function (h) { return "<th>" + esc(h) + "</th>"; }).join("") + "</tr></thead><tbody>" +
+      body.map(function (r) { return "<tr>" + r.map(function (v, k) { return k === 0 ? '<td class="no"><span>' + v + "</span></td>" : "<td" + (k >= 3 && k !== 5 ? ' class="n"' : "") + ">" + esc(v) + "</td>"; }).join("") + "</tr>"; }).join("") +
+      "</tbody><tfoot><tr>" + foot.map(function (v, k) { return "<td" + (k >= 3 ? ' class="n"' : "") + ">" + esc(v) + "</td>"; }).join("") + "</tr></tfoot></table>" +
+      '<p style="color:#667085">토지이음 정보는 법적 효력이 없는 참고자료입니다. 확대·축소는 왼쪽 위 +/−(0.25단계)·마우스 휠, ⊡ = 필지에 맞추기.</p></div><script>' +
+      "(" + eumMapPage.toString().replace(/<\//g, "<\\/") + ")(" + J(D) + ");</scr" + "ipt></body></html>";
+    var w = window.open(URL.createObjectURL(new Blob([html], { type: "text/html" })), "_blank");
+    if (!w) msg("팝업이 막혔습니다. 브라우저 주소창 오른쪽의 팝업 허용을 눌러 주세요.");
+  }
   function zoomTo(fs) {
     if (!fs.length) return;
     var ext = ol.extent.createEmpty();
@@ -342,6 +450,7 @@
     if (a === "fit") zoomTo(E.list.map(function (p) { return p.feature; }));
     if (a === "color0") setColor(DEF_COLOR);
     if (a === "clear") { if (!confirm("고른 필지를 모두 지울까요?")) return; src.clear(); E.list = []; E.sel = null; render(); msg(""); }
+    if (a === "mapopen") openMapWindow();
     if (a === "copy") {
       var head = ["번호", "소재지", "지목", "면적(㎡)", "면적(평)", "용도지역", "공시지가(원/㎡)", "공시지가 합계(백만원)", "기준연월", "PNU"], sum = 0, val = 0;
       var rows = E.list.map(function (p, i) {
