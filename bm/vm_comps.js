@@ -64,8 +64,7 @@
     "#vmc select.cand{flex:1;min-width:260px}#vmc select.rg{max-width:220px}#vmc .ms{position:relative}#vmc .ms summary{list-style:none;cursor:pointer;border:1px solid #d0d5dd;border-radius:6px;padding:4px 22px 4px 7px;font-size:12.5px;max-width:250px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#fff}" +
     "#vmc .ms summary::-webkit-details-marker{display:none}#vmc .ms summary:after{content:'▾';position:absolute;right:7px;top:4px;color:#667085}" +
     "#vmc .ms .opts{position:absolute;z-index:5;top:100%;left:0;margin-top:2px;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.15);padding:8px;display:grid;gap:3px 12px;width:max-content;max-width:420px}" +
-    "#vmc .ms .opts label{font-size:12.5px;white-space:nowrap}#vmc .ms .opts .same{grid-column:1/-1;display:flex;align-items:center;gap:10px;font-weight:700;border-bottom:1px solid #eaecf0;padding-bottom:4px;margin-bottom:2px}" +
-    "#vmc .ms .opts button.all{border:1px solid #d0d5dd;background:#fff;border-radius:5px;padding:1px 9px;font-size:12px;font-weight:600;cursor:pointer}#vmc .ms .opts button.all.on{border-color:#D9653B;color:#D9653B;background:#FBEFE9}";
+    "#vmc .ms .opts label{font-size:12.5px;white-space:nowrap}#vmc .ms .opts .same{grid-column:1/-1;display:flex;align-items:center;gap:10px;font-weight:700;border-bottom:1px solid #eaecf0;padding-bottom:4px;margin-bottom:2px}";
   document.head.appendChild(css);
 
   var P = document.createElement("div");
@@ -113,26 +112,24 @@
   // ── 여러 개 고르기(유형·용도지역): 맨 위 '대상지와 같게' + 모든 값, 중복 선택. 고른 것은 summary 에 보인다
   function multi(k, list, cols) {
     return '<details class="ms" data-k="' + k + '"><summary>대상지와 같게</summary><div class="opts" style="grid-template-columns:repeat(' + cols + ',auto)">' +
-      '<div class="same"><label><input type="checkbox" value="SAME" checked>대상지와 같게</label><button type="button" class="all" data-all="' + k + '" title="전부 고르기 · 다시 누르면 전부 풀기">모두</button></div>' +
+      '<div class="same"><label><input type="checkbox" value="SAME" checked>대상지와 같게</label><label title="체크하면 전부 고르기 · 풀면 전부 풀기"><input type="checkbox" class="allck">모두</label></div>' +
       list.map(function (x) { return '<label><input type="checkbox" value="' + x[0] + '">' + x[1] + "</label>"; }).join("") + "</div></details>";
   }
   function picked(k) {
     var box = $('.ms[data-k="' + k + '"]');
-    return Array.prototype.map.call(box.querySelectorAll("input:checked"), function (c) { return c.value; });
+    return Array.prototype.map.call(box.querySelectorAll("input:checked:not(.allck)"), function (c) { return c.value; });
   }
   function msLabel(k) {
     var v = picked(k), L = k === "pt" ? typeLabel : zoneLabel;
-    var box = $('.ms[data-k="' + k + '"]'), n = box.querySelectorAll('input:not([value="SAME"])').length, real = v.filter(function (c) { return c !== "SAME"; });
+    var box = $('.ms[data-k="' + k + '"]'), n = box.querySelectorAll('input:not([value="SAME"]):not(.allck)').length, real = v.filter(function (c) { return c !== "SAME"; });
     box.querySelector("summary").textContent = real.length === n ? "모두" : v.length ? v.map(function (c) { return c === "SAME" ? "대상지와 같게" : L(c); }).join(", ") : "(고르세요)";
-    box.querySelector("button.all").classList.toggle("on", real.length === n);
+    box.querySelector(".allck").checked = real.length === n;            // 하나하나 다 고르면 '모두'도 저절로 체크
   }
-  // [모두](2026-10-22): 그 목록 전부 고르기 ↔ 전부 풀기('대상지와 같게'는 그대로 둔다)
-  P.addEventListener("click", function (e) {
-    var b = e.target.closest && e.target.closest("button.all"); if (!b) return;
-    e.preventDefault(); e.stopPropagation();
-    var k = b.dataset.all, box = $('.ms[data-k="' + k + '"]'), cbs = box.querySelectorAll('input:not([value="SAME"])');
-    var all = Array.prototype.every.call(cbs, function (c) { return c.checked; });
-    cbs.forEach(function (c) { c.checked = !all; }); msLabel(k);
+  // '모두' 체크 칸(2026-10-22): 체크 = 그 목록 전부 고르기, 풀기 = 전부 풀기('대상지와 같게'는 그대로)
+  P.addEventListener("change", function (e) {
+    if (!e.target.classList || !e.target.classList.contains("allck")) return;
+    var box = e.target.closest(".ms"), on = e.target.checked;
+    box.querySelectorAll('input:not([value="SAME"]):not(.allck)').forEach(function (c) { c.checked = on; });
   }, true);
   $('[data-k="onlyinc"]').onchange = function () { V.onlyInc = this.checked; save(); vmMapMark(); };
   ["pt", "zn"].forEach(function (k) { $('.ms[data-k="' + k + '"]').addEventListener("change", function () { msLabel(k); }); });
@@ -458,6 +455,7 @@
       "전체 " + rows.length + "건 중 비교사례 <b>" + st.n + "건</b>" +
       (st.land ? " · 토지단가 평균 <b>" + fmt(st.land.avg) + "</b> (최소 " + fmt(st.land.min) + " ~ 최대 " + fmt(st.land.max) + ") 만원/평" : "") +
       (st.bldg ? " · 연면적단가 평균 <b>" + fmt(st.bldg.avg) + "</b> (최소 " + fmt(st.bldg.min) + " ~ 최대 " + fmt(st.bldg.max) + ") 만원/평" : "") +
+      (rows.some(function (r) { return r.offx; }) ? "<br>* 공시지가대비 = 거래 당시 공시지가 대비 토지단가 배수" : "") +
       (d.meta.parseFailures.length ? "<br>상세를 못 읽은 필지 " + d.meta.parseFailures.length + "개 — 다시 수집하거나 직접 확인" : "");
     var link = function (r) { return '<a href="/properties/trades/' + r.pnu + '" target="_blank" rel="noopener">' + esc(r.jibun) + "</a>"; };
     var tr = function (r, cls) {
@@ -471,7 +469,7 @@
     var srt = V.sort || {};
     tw.innerHTML = "<table><thead><tr>" + HEAD.map(function (h, k) {
       var btn = SORT[k] ? '<button class="so' + (srt.k === k ? " on" : "") + '" data-so="' + k + '" title="오름차순·내림차순">' + (srt.k === k ? (srt.dir > 0 ? "▲" : "▼") : "↕") + "</button>" : "";
-      return "<th" + (k >= 6 && k <= 13 && k !== 11 ? ' class="n"' : "") + ">" + h + btn + "</th>"; }).join("") + "</tr></thead><tbody>" +
+      return "<th" + (k >= 6 && k <= 13 && k !== 11 ? ' class="n"' : "") + ">" + (h === "공시지가대비" ? h + "<sup>*</sup>" : h) + btn + "</th>"; }).join("") + "</tr></thead><tbody>" +
       tr(sr, "subj") + rows.map(function (r) { return tr(r, r.inc ? "" : "out"); }).join("") + "</tbody></table>";
     tw.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
       cb.onchange = function () { V.rows[+cb.dataset.i].inc = cb.checked; save(); render(); };
@@ -631,9 +629,9 @@
       '<div>배경 투명도 <input id="tr" type="range" min="0" max="90" step="5" value="0"><span id="tro">0%</span></div>' +
       '<div>번호 색 <input id="col" type="color" value="#D9653B" title="동그라미 번호 색"><button id="col0" class="lk" title="기본색으로">기본색</button></div>' +
       '<div><button id="fs" class="btn" style="border:0">⛶ 지도 크게 보기</button></div></div></div>' +
-      '<div class="wrap"><div class="tbar"><b>비교사례 표</b><button id="cp" class="btn">표 복사</button></div><table><thead><tr>' + body[0].map(function (h) { return "<th>" + esc(h) + "</th>"; }).join("") + "</tr></thead><tbody>" +
+      '<div class="wrap"><div class="tbar"><b>비교사례 표</b><button id="cp" class="btn">표 복사</button></div><table><thead><tr>' + body[0].map(function (h) { return "<th>" + (h === "공시지가대비" ? esc(h) + "<sup>*</sup>" : esc(h)) + "</th>"; }).join("") + "</tr></thead><tbody>" +
       body.slice(1).map(function (c, i) { return '<tr class="' + (i === 0 ? "subj" : (c[1] === "N" ? "out" : "")) + '">' + c.map(function (v, k) { return "<td" + (k === 14 ? ' class="note"' : k === 0 ? ' class="no"' : "") + ">" + esc(v) + "</td>"; }).join("") + "</tr>"; }).join("") +
-      "</tbody></table><p style=\"color:#667085\">채운 동그라미 = 비교사례, 속 빈 동그라미 = 뺀 거래, ★ = 대상지. 단가는 실거래가 ÷ (면적㎡ × 0.3025). 표 복사는 엑셀에 그대로 붙습니다.</p></div><script>" +
+      "</tbody></table><p style=\"color:#667085\">* 공시지가대비 = 거래 당시 공시지가 대비 토지단가 배수. 채운 동그라미 = 비교사례, 속 빈 동그라미 = 뺀 거래, ★ = 대상지. 단가는 실거래가 ÷ (면적㎡ × 0.3025). 표 복사는 엑셀에 그대로 붙습니다.</p></div><script>" +
       "(" + mapPage.toString().replace(/<\//g, "<\\/") + ")(" + J(pts) + "," + (d.config.radiusKm || 0) + "," + J(tsvOf(body)) + ");</scr" + "ipt></body></html>";
   }
 
