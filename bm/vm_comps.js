@@ -440,6 +440,11 @@
         var y = +t.tradeDate.slice(0, 4);
         if (y < y1 || y > y2) return;
         if (c.noAuction !== false && isAuction(t)) { V.aucOut++; return; }   // 경매 제외(기본)
+        // 용도를 바꿔 되판 필지(예 2021 다가구 → 2024 근린)는 앞 거래 줄을 싣지 않는다 — 뒤 거래 비고에 '2021년 다가구 xx억원 거래 후 용도변경하여 매각'
+        var next = (lot.histories || []).filter(function (x) { return x.tradeDate > t.tradeDate && !isAuction(x); })
+          .sort(function (p, q) { return p.tradeDate < q.tradeDate ? -1 : 1; })[0];
+        var ntyp = next && next.propertyTypeDetail ? next.propertyTypeDetail.label : "", ttyp = t.propertyTypeDetail ? t.propertyTypeDetail.label : "";
+        if (ntyp && ttyp && ntyp !== ttyp && +next.tradeDate.slice(0, 4) <= y2) return;
         var key = lot.pnu + "|" + t.tradePrice, ms = Date.parse(t.tradeDate);
         var typ = t.propertyTypeDetail ? t.propertyTypeDetail.label : "", inc = true, notes = [];
         var twin = (seenKey[key] || []).filter(function (x) { return Math.abs(x - ms) <= 548 * 864e5; });
@@ -454,6 +459,12 @@
           if (excl.indexOf(typ) >= 0) { inc = false; notes.push("거래당시 유형 " + typ + " → 대상 유형 아님"); }
           if (tz && lot.zoneLabel && lot.zoneLabel !== tz) { inc = false; notes.push("현재 용도지역 " + lot.zoneLabel + "(대상지 " + tz + ") — 확인 필요"); }
         }
+        // 같은 필지의 바로 앞 거래와 유형이 다르면(예 2021 다가구 → 2024 근린) 용도를 바꿔 되판 거래로 적는다(2026-10-22 사용자 요청)
+        var prev = (lot.histories || []).filter(function (x) { return x.tradeDate < t.tradeDate && !isAuction(x); })
+          .sort(function (p, q) { return p.tradeDate < q.tradeDate ? 1 : -1; })[0];
+        var ptyp = prev && prev.propertyTypeDetail ? prev.propertyTypeDetail.label : "";
+        if (ptyp && typ && ptyp !== typ) notes.unshift(prev.tradeDate.slice(0, 4) + "년 " + ptyp + " " + (Math.round(prev.tradePrice / 1e6) / 100).toLocaleString("ko-KR") + "억원 거래 후 " +
+          (ptyp === "토지" ? "신축하여 매각" : "용도변경하여 매각" + ((lot.approvalDate || "").replace(/\./g, "-") > prev.tradeDate ? "(" + lot.approvalDate.slice(0, 7) + " 사용승인 — 신축)" : "")));   // 앞이 토지 = 신축, 그 사이 사용승인이면 덧붙임
         var ap = (lot.approvalDate || "").replace(/\./g, "-");
         if (ap && ap > t.tradeDate) notes.push("거래 후 신축 → 사용승인일은 신축건물 기준");
         if (t.tradePrice % 1000000) notes.push("거래가 끝자리 비정형 → 지분·특수거래 확인");
