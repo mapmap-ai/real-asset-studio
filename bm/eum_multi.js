@@ -347,7 +347,7 @@
     var foot = ["", E.list.length + "필지 합계", "", fmt(sum), fmt(sum * 0.3025, 1), "", "", fmt(val / 1e6)];
     var tsv = [head].concat(body, [foot]).map(function (r) { return r.join("\t"); }).join("\n");
     // 제목: 첫 필지의 동 이름 + 지번(서울특별시 용산구 한강로2가 424번지 → 한강로2가 424)
-    var first = (E.list[0].address || "").replace(/\s+(산\s*)?\d[\d-]*\s*번지?\s*$/, "").trim().split(/\s+/).slice(-1)[0] || "";
+    var first = (E.list[0].address || "").replace(/\s+(산\s*)?\d[\d-]*\s*(번지)?\s*$/, "").trim().split(/\s+/).slice(-1)[0] || "";
     var title = (first ? first + " " : "") + E.list[0].jibun + (E.list.length > 1 ? " 외 " + (E.list.length - 1) + "필지" : "");
     var D = { parcels: parcels, color: E.color, bg: E.bg === "ksky" ? "sky" : "map", tsv: tsv };
     var J = function (v) { return JSON.stringify(v).replace(/</g, "\\u003c"); };
