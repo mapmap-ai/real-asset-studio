@@ -22,7 +22,8 @@
   // 유형·용도지역 목록 = 밸류맵 지도 필터와 같은 값(2026-10-19 밸류맵 화면 코드에서 확인). 여러 개는 쉼표로 묶어 한 번에 묻는다.
   var TYPES = [["BUILDING", "상업업무"], ["HOUSING", "단독/다가구"], ["LAND", "토지"], ["FACTORY", "공장/창고"], ["STORE", "상가"], ["APT", "APT/연립"]];
   // 필지(상세페이지)의 유형 코드 → 위 값. 대상지와 같게를 고를 때 쓴다
-  var CODE2PT = { CB: "BUILDING", HD: "HOUSING", LD: "LAND", FW: "FACTORY", CP: "STORE", AP: "APT", MH: "APT", OF: "APT" };
+  // 뜻이 확실한 코드만(2026-10-22: MH 를 APT 로 짐작했다가 다가구가 APT/연립으로 잡힘 — MH·OF·AF 는 뜻을 몰라 뺐다. 거래 한 건은 글자(label)로 먼저 판단)
+  var CODE2PT = { CB: "BUILDING", HD: "HOUSING", LD: "LAND", FW: "FACTORY", CP: "STORE", AP: "APT" };
   // 거래 한 건의 '거래 당시 유형'(propertyTypeDetail.label) → 위 값. 고른 유형에 없으면 비교사례에서 뺀다(예전 '제외 유형' 칸 대신)
   var DETAIL2PT = [[/단독|다가구/, "HOUSING"], [/아파트|연립|다세대|오피스텔|공동주택/, "APT"], [/공장|창고/, "FACTORY"], [/상가|점포/, "STORE"],
     [/^토지|나대지|대지$|임야|전$|답$/, "LAND"], [/근린|업무|판매|숙박|교육|의료|문화|종교|위락|운동|노유자|자동차|기타|상업/, "BUILDING"]];
@@ -314,9 +315,8 @@
     var okZones = newer ? (c.znList || []).map(zoneLabel) : null;
     var catOf = function (t) {
       var pd = t.propertyTypeDetail || {};
-      if (CODE2PT[pd.code]) return CODE2PT[pd.code];
-      var hit = DETAIL2PT.find(function (x) { return x[0].test(pd.label || ""); });
-      return hit ? hit[1] : null;
+      var hit = DETAIL2PT.find(function (x) { return x[0].test(pd.label || ""); });   // 글자 먼저('다가구' → 단독/다가구)
+      return hit ? hit[1] : (CODE2PT[pd.code] || null);
     };
     var rows = [], seenKey = {};
     // 경매 낙찰 기록: 밸류맵은 실거래(TRADE)와 경매(AUCTION)를 따로 두지만, 거래내역에 낙찰가율·낙찰가·감정가가 붙은 기록이 섞여 오면 뺀다.
