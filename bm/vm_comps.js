@@ -434,17 +434,33 @@
         /AUCTION|경매/.test([t.type, t.tradeType, t.dealType, t.tradeTypeLabel, bt.code, bt.label].filter(Boolean).join(" "));
     };
     V.aucOut = 0;
+    // 유형을 바꿔 되판 거래 찾기: 같은 필지 바로 앞·뒤 거래(경매 뺌)의 유형(거래 당시 세부 유형)이 다르면 그 거래
+    var tyOf = function (t) { return t.propertyTypeDetail ? t.propertyTypeDetail.label : ""; };
+    var near = function (lot, t, dir) {
+      return (lot.histories || []).filter(function (x) { return dir > 0 ? x.tradeDate > t.tradeDate : x.tradeDate < t.tradeDate; }).filter(function (x) { return !isAuction(x); })
+        .sort(function (p, q) { return (p.tradeDate < q.tradeDate ? -1 : 1) * dir; })[0];
+    };
+    var convPrev = function (lot, t) { var x = near(lot, t, -1); return x && tyOf(x) && tyOf(t) && tyOf(x) !== tyOf(t) ? x : null; };
+    var convNext = function (lot, t) { var x = near(lot, t, 1); return x && tyOf(x) && tyOf(t) && tyOf(x) !== tyOf(t) ? x : null; };
+    var eok = function (v) { return (Math.round(v / 1e6) / 100).toLocaleString("ko-KR") + "억원"; };
+    // 앞이 토지 = 신축, 두 거래 사이에 사용승인이면 '(YYYY.MM 사용승인 — 신축)' 덧붙임
+    var how = function (lot, a) { return tyOf(a) === "토지" ? "신축하여" : "용도변경하여"; };
+    var built = function (lot, a, b) { var ap = (lot.approvalDate || "").replace(/\./g, "-"); return tyOf(a) !== "토지" && ap > a.tradeDate && (!b || ap <= b.tradeDate) ? "(" + lot.approvalDate.slice(0, 7) + " 사용승인 — 신축)" : ""; };
+    var convShort = function (lot, a) { return a.tradeDate.slice(0, 4) + "년 " + tyOf(a) + " " + eok(a.tradePrice) + " 거래 후 " + how(lot, a) + " 매각" + built(lot, a); };
+    var convFull = function (lot, a, b) { return a.tradeDate.slice(0, 4) + "년 " + tyOf(a) + " " + eok(a.tradePrice) + " 매입 후 " + how(lot, a) + " " + b.tradeDate.slice(0, 4) + "년 " + tyOf(b) + " " + eok(b.tradePrice) + " 매각" + built(lot, a, b); };
+    // 고른 유형인가(아래 거르기와 같은 기준)
+    var typeOk = function (t) { if (newer) { var ct = catOf(t); return !ct || c.ptList.indexOf(ct) >= 0; } return excl.indexOf(tyOf(t)) < 0; };
     d.lots.forEach(function (lot) {
       var nl = (lot.lands || []).length;
       (lot.histories || []).forEach(function (t) {
         var y = +t.tradeDate.slice(0, 4);
         if (y < y1 || y > y2) return;
         if (c.noAuction !== false && isAuction(t)) { V.aucOut++; return; }   // 경매 제외(기본)
-        // 용도를 바꿔 되판 필지(예 2021 다가구 → 2024 근린)는 앞 거래 줄을 싣지 않는다 — 뒤 거래 비고에 '2021년 다가구 xx억원 거래 후 용도변경하여 매각'
-        var next = (lot.histories || []).filter(function (x) { return x.tradeDate > t.tradeDate && !isAuction(x); })
-          .sort(function (p, q) { return p.tradeDate < q.tradeDate ? -1 : 1; })[0];
-        var ntyp = next && next.propertyTypeDetail ? next.propertyTypeDetail.label : "", ttyp = t.propertyTypeDetail ? t.propertyTypeDetail.label : "";
-        if (ntyp && ttyp && ntyp !== ttyp && +next.tradeDate.slice(0, 4) <= y2) return;
+        // 유형을 바꿔 되판 필지(2026-10-22 사용자 요청, 예 역삼동 683-7: 2021 다가구 → 2024 근린)
+        //   앞 거래의 유형을 고르지 않았으면 앞 거래 줄은 싣지 않고 뒤 거래 비고에 'YYYY년 다가구 xx억원 거래 후 용도변경하여 매각'
+        //   앞 거래 유형도 골랐으면 두 줄 다 싣고 둘 다 비고에 'YYYY년 다가구 xx억원 매입 후 용도변경하여 YYYY년 근린 xx억원 매각'
+        var next = convNext(lot, t);
+        if (next && +next.tradeDate.slice(0, 4) <= y2 && !typeOk(t)) return;
         var key = lot.pnu + "|" + t.tradePrice, ms = Date.parse(t.tradeDate);
         var typ = t.propertyTypeDetail ? t.propertyTypeDetail.label : "", inc = true, notes = [];
         var twin = (seenKey[key] || []).filter(function (x) { return Math.abs(x - ms) <= 548 * 864e5; });
@@ -459,12 +475,9 @@
           if (excl.indexOf(typ) >= 0) { inc = false; notes.push("거래당시 유형 " + typ + " → 대상 유형 아님"); }
           if (tz && lot.zoneLabel && lot.zoneLabel !== tz) { inc = false; notes.push("현재 용도지역 " + lot.zoneLabel + "(대상지 " + tz + ") — 확인 필요"); }
         }
-        // 같은 필지의 바로 앞 거래와 유형이 다르면(예 2021 다가구 → 2024 근린) 용도를 바꿔 되판 거래로 적는다(2026-10-22 사용자 요청)
-        var prev = (lot.histories || []).filter(function (x) { return x.tradeDate < t.tradeDate && !isAuction(x); })
-          .sort(function (p, q) { return p.tradeDate < q.tradeDate ? 1 : -1; })[0];
-        var ptyp = prev && prev.propertyTypeDetail ? prev.propertyTypeDetail.label : "";
-        if (ptyp && typ && ptyp !== typ) notes.unshift(prev.tradeDate.slice(0, 4) + "년 " + ptyp + " " + (Math.round(prev.tradePrice / 1e6) / 100).toLocaleString("ko-KR") + "억원 거래 후 " +
-          (ptyp === "토지" ? "신축하여 매각" : "용도변경하여 매각" + ((lot.approvalDate || "").replace(/\./g, "-") > prev.tradeDate ? "(" + lot.approvalDate.slice(0, 7) + " 사용승인 — 신축)" : "")));   // 앞이 토지 = 신축, 그 사이 사용승인이면 덧붙임
+        var prev = convPrev(lot, t);
+        if (prev) notes.unshift(typeOk(prev) && +prev.tradeDate.slice(0, 4) >= y1 ? convFull(lot, prev, t) : convShort(lot, prev));
+        if (next && +next.tradeDate.slice(0, 4) <= y2) notes.unshift(convFull(lot, t, next));
         var ap = (lot.approvalDate || "").replace(/\./g, "-");
         if (ap && ap > t.tradeDate) notes.push("거래 후 신축 → 사용승인일은 신축건물 기준");
         if (t.tradePrice % 1000000) notes.push("거래가 끝자리 비정형 → 지분·특수거래 확인");
