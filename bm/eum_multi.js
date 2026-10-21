@@ -11,7 +11,7 @@
   if (window.__EUM_MULTI) { window.__EUM_MULTI.show(); return; }
 
   var KEY = "eumMultiParcels";
-  var E = window.__EUM_MULTI = { list: [], pick: false, sel: null };
+  var E = window.__EUM_MULTI = { list: [], pick: false, sel: null, gen: 0 };
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
   var fmt = function (v, d) { return v == null || v === "" || isNaN(v) ? "" : Number(v).toLocaleString("ko-KR", { maximumFractionDigits: d || 0, minimumFractionDigits: d || 0 }); };
 
@@ -126,7 +126,7 @@
   var P = document.createElement("div");
   P.id = "emp";
   P.innerHTML = '<div class="eg" data-e="l"></div><div class="eg" data-e="r"></div><div class="eg" data-e="t"></div><div class="eg" data-e="b"></div><div class="eg" data-e="tr"></div><div class="eg" data-e="br"></div>' +
-    '<div class="hd"><b>여러 필지 선택</b><button data-a="min" title="접기">–</button><button data-a="close" title="닫기">×</button></div>' +
+    '<div class="hd"><b>여러 필지 선택</b><button data-a="reset" title="새로고침 — 고른 필지·배경·이름표를 지우고 처음 상태로">↻</button><button data-a="min" title="접기">–</button><button data-a="close" title="닫기">×</button></div>' +
     '<div class="bd"><textarea placeholder="지번을 한 줄에 하나씩 (예: 용산구 한강로2가 424) · PNU 19자리도 됩니다"></textarea>' +
     '<div class="row"><button class="pri" data-a="add">목록 추가</button><button data-a="stopadd" class="on" hidden>추가 멈춤</button><button data-a="pick">지도 클릭으로 고르기</button><button data-a="fit">전체 보기</button>' +
     '<button data-a="mapopen" class="pri2" title="칠한 필지를 새 창의 선명한 카카오 지도 위에 — 캡처하기 좋게">지도 열기</button><button data-a="copy">표 복사</button><button data-a="link">링크 복사</button><button data-a="clear">모두 지우기</button></div>' +
@@ -429,9 +429,10 @@
   // 여러 지번 추가: 한 번에 하나씩. '추가 멈춤'(2026-10-20 사용자 요청)을 누르면 지금 찾는 것까지만 넣고 멈춘다 —
   //   남은 지번은 입력 칸에 되돌려 두어 [목록 추가]를 다시 누르면 이어서 넣는다.
   function addMany(keys) {
-    var ok = 0, bad = [], i = 0, stopBtn = $p("[data-a=stopadd]"), addBtn = $p("[data-a=add]");
+    var ok = 0, bad = [], i = 0, stopBtn = $p("[data-a=stopadd]"), addBtn = $p("[data-a=add]"), g = E.gen;
     E.stopAdd = false; stopBtn.hidden = false; addBtn.disabled = true;
     function next() {
+      if (g !== E.gen) { stopBtn.hidden = true; addBtn.disabled = false; return; }     // 새로고침했으면 남은 지번은 버린다
       if (i >= keys.length || E.stopAdd) {
         var left = keys.slice(i);
         stopBtn.hidden = true; addBtn.disabled = false;
@@ -442,7 +443,7 @@
         return;
       }
       var k = keys[i++]; msg("찾는 중… " + k + " (" + i + "/" + keys.length + ")");
-      searchPnu(k).then(addPnu).then(function (p) { if (!p.dup) ok++; render(); }).catch(function (e) { bad.push(k); console.warn(e); }).then(next);
+      searchPnu(k).then(function (r) { if (g !== E.gen) throw new Error("새로고침"); return addPnu(r); }).then(function (p) { if (!p.dup) ok++; render(); }).catch(function (e) { bad.push(k); console.warn(e); }).then(next);
     }
     next();
   }
@@ -469,6 +470,18 @@
     if (a === "close") { P.style.display = "none"; E.pick = false; document.body.classList.remove("emp-pick"); }
     if (a === "stopadd") { E.stopAdd = true; msg("멈추는 중… (지금 찾는 지번까지만 넣습니다)"); }
     if (a === "min") P.classList.toggle("min");
+    // 새로고침(2026-10-23 사용자 요청): 고른 필지·입력 칸·배경·이름표를 처음 상태로(필지 색·창 크기는 그대로). 추가 중이면 멈춘다
+    if (a === "reset") {
+      if (!confirm("고른 필지와 설정을 지우고 처음 상태로 돌아갈까요?")) return;
+      E.gen++; E.stopAdd = true;
+      src.clear(); E.list = []; E.sel = null; $p("textarea").value = "";
+      E.pick = false; $p("[data-a=pick]").classList.remove("on"); document.body.classList.remove("emp-pick");
+      E.bg = "none"; E.op = 100; E.bt = 0; selBg.value = "none"; applyBg(); slider();
+      E.showNo = true; E.showJibun = true; $p("[data-x=showNo]").checked = true; $p("[data-x=showJibun]").checked = true;
+      try { [KEY, KEY + "Bg", KEY + "Lbl"].forEach(function (k) { localStorage.removeItem(k); }); } catch (x) {}
+      if (/[#&]multi=/.test(location.hash)) history.replaceState(null, "", location.pathname + location.search);
+      render(); msg("지번을 적고 '목록 추가'를 누르거나, '지도 클릭으로 고르기'를 켜세요.");
+    }
     if (a === "add") {
       var keys = $p("textarea").value.split(/\n|;/).map(function (s) { return s.trim(); }).filter(Boolean);
       if (!keys.length) return msg("지번을 적어 주세요.");

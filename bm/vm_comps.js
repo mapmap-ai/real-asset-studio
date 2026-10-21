@@ -3,7 +3,7 @@
 //   주소검색 /api/properties/addresses · 마커 /api/lots/markers(zoomLevel=20 = 필지별 최신 거래 1건)
 //   법정동 경계 /api/properties/cadastrals/districts/polygons · 상세 /properties/trades/{pnu}(SSR, histories 포함)
 // 수집 원리·자동 판정은 valuemap-helper 스킬(collect.js·collect_radius.js·build_xlsx.py)과 같다.
-(function () {
+(function VMC() {
   if (!/(^|\.)valueupmap\.com$/.test(location.hostname)) {
     if (confirm("밸류맵(www.valueupmap.com) 화면에서 눌러야 합니다. 밸류맵을 열까요?")) location.href = "https://www.valueupmap.com/";
     return;
@@ -73,7 +73,7 @@
   P.id = "vmc";
   P.innerHTML = '<div class="rz" title="끌어서 창·글씨 크기 바꾸기 (두 번 누르면 원래대로)"></div>' +
     '<div class="eg" data-e="l"></div><div class="eg" data-e="r"></div><div class="eg" data-e="t"></div><div class="eg" data-e="b"></div>' +
-    '<div class="hd"><b>밸류맵 실거래 비교사례</b><button data-a="min" title="접기">–</button><button data-a="close" title="닫기">×</button></div>' +
+    '<div class="hd"><b>밸류맵 실거래 비교사례</b><button data-a="reset" title="새로고침 — 지난 결과·조건을 지우고 처음 상태로">↻</button><button data-a="min" title="접기">–</button><button data-a="close" title="닫기">×</button></div>' +
     '<div class="bd">' +
     '<div class="cfgbar" hidden><span class="cfgsum"></span><button type="button" data-a="cfg">조건 펴기 ▾</button></div><div class="cfg">' +
     '<div class="f"><input class="addr" type="text" placeholder="대상 주소 (예: 서울시 용산구 한강대로 100) · 지번도 됩니다">' +
@@ -767,6 +767,17 @@
     var b = e.target.closest("button"); if (!b) return;
     var a = b.dataset.a;
     if (a === "min") P.classList.toggle("min");
+    // 새로고침(2026-10-23 사용자 요청): 지난 결과·조건을 지우고 창을 처음부터 다시 만든다(창 크기·번호 색은 그대로).
+    //   수집 중이면 멈추고, 밸류맵 지도 표시(강조·지도 크게)도 되돌린 뒤 이 함수(VMC)를 다시 부른다
+    else if (a === "reset") {
+      if (!confirm("지난 결과와 조건을 지우고 처음 상태로 돌아갈까요?")) return;
+      V.stop = true;
+      if ($('[data-k="mapbig"]').checked) vmMapBig(false);
+      try { localStorage.removeItem(KEY); } catch (x) {}
+      var mm = document.getElementById("vmcMapMark"); if (mm) mm.textContent = "";
+      P.remove(); css.remove(); delete window.__VM_COMPS;
+      VMC();
+    }
     else if (a === "close") { P.style.display = "none"; vmMapMark(); if ($('[data-k="mapbig"]').checked) { $('[data-k="mapbig"]').checked = false; vmMapBig(false); } }
     else if (a === "stop") { V.stop = true; msg("멈추는 중…"); }
     else if (a === "cfg") cfgFold(!$(".cfg").hidden);
