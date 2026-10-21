@@ -99,6 +99,10 @@
   var css = document.createElement("style");
   css.textContent = "#emp{position:fixed;left:16px;bottom:16px;z-index:2147483000;width:600px;max-width:calc(100vw - 32px);max-height:72vh;display:flex;flex-direction:column;background:#fff;color:#1d2433;border:1px solid #d0d5dd;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.25);font:13px/1.45 'Noto Sans KR','Malgun Gothic',sans-serif}" +
     "#emp *{box-sizing:border-box;font-family:inherit}#emp .hd{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#D9653B;color:#fff;border-radius:10px 10px 0 0;cursor:move;user-select:none}" +
+    "#emp .eg{position:absolute;z-index:2}#emp .eg[data-e=l]{left:-4px;top:12px;bottom:12px;width:8px;cursor:ew-resize}#emp .eg[data-e=r]{right:-4px;top:12px;bottom:12px;width:8px;cursor:ew-resize}" +
+    "#emp .eg[data-e=t]{top:-4px;left:12px;right:12px;height:8px;cursor:ns-resize}#emp .eg[data-e=b]{bottom:-4px;left:12px;right:12px;height:8px;cursor:ns-resize}" +
+    "#emp .eg[data-e=tr]{top:-4px;right:-4px;width:16px;height:16px;cursor:nesw-resize;z-index:3}#emp .eg[data-e=br]{bottom:-4px;right:-4px;width:16px;height:16px;cursor:nwse-resize;z-index:3}" +
+    "#emp.sized .bd{flex:1 1 auto;min-height:0}#emp.sized .tw{max-height:none;flex:1 1 auto;min-height:80px}" +
     "#emp .hd b{flex:1;font-size:14px}#emp .hd button{background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0 4px}" +
     "#emp .bd{padding:8px 10px;display:flex;flex-direction:column;gap:6px;overflow:auto}#emp textarea{width:100%;height:58px;resize:vertical;border:1px solid #d0d5dd;border-radius:6px;padding:5px 7px;font-size:12.5px}" +
     "#emp .row{display:flex;gap:5px;flex-wrap:wrap}#emp .row button{padding:5px 9px;border:1px solid #d0d5dd;background:#fff;border-radius:6px;cursor:pointer;font-size:12.5px}" +
@@ -121,7 +125,8 @@
 
   var P = document.createElement("div");
   P.id = "emp";
-  P.innerHTML = '<div class="hd"><b>여러 필지 선택</b><button data-a="min" title="접기">–</button><button data-a="close" title="닫기">×</button></div>' +
+  P.innerHTML = '<div class="eg" data-e="l"></div><div class="eg" data-e="r"></div><div class="eg" data-e="t"></div><div class="eg" data-e="b"></div><div class="eg" data-e="tr"></div><div class="eg" data-e="br"></div>' +
+    '<div class="hd"><b>여러 필지 선택</b><button data-a="min" title="접기">–</button><button data-a="close" title="닫기">×</button></div>' +
     '<div class="bd"><textarea placeholder="지번을 한 줄에 하나씩 (예: 용산구 한강로2가 424) · PNU 19자리도 됩니다"></textarea>' +
     '<div class="row"><button class="pri" data-a="add">목록 추가</button><button data-a="stopadd" class="on" hidden>추가 멈춤</button><button data-a="pick">지도 클릭으로 고르기</button><button data-a="fit">전체 보기</button>' +
     '<button data-a="mapopen" class="pri2" title="칠한 필지를 새 창의 선명한 카카오 지도 위에 — 캡처하기 좋게">지도 열기</button><button data-a="copy">표 복사</button><button data-a="link">링크 복사</button><button data-a="clear">모두 지우기</button></div>' +
@@ -142,10 +147,36 @@
     var hd = $p(".hd"), sx, sy, ox, oy;
     hd.addEventListener("mousedown", function (e) {
       if (e.target.tagName === "BUTTON") return;
+      e.preventDefault();
       var r = P.getBoundingClientRect(); sx = e.clientX; sy = e.clientY; ox = r.left; oy = r.top;
-      function mv(ev) { P.style.left = ox + ev.clientX - sx + "px"; P.style.top = oy + ev.clientY - sy + "px"; P.style.bottom = "auto"; }
+      function mv(ev) { P.style.left = Math.max(0, Math.min(ox + ev.clientX - sx, innerWidth - 60)) + "px"; P.style.top = Math.max(0, Math.min(oy + ev.clientY - sy, innerHeight - 40)) + "px"; P.style.bottom = "auto"; }
       function up() { document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); }
       document.addEventListener("mousemove", mv); document.addEventListener("mouseup", up);
+    });
+  })();
+
+  // 창 크기(2026-10-22): 왼쪽·오른쪽 가장자리 = 폭, 위·아래 = 높이, 오른쪽 위·아래 모서리 = 폭과 높이 함께. 반대쪽 가장자리는 제자리
+  (function () {
+    try { var sz = JSON.parse(localStorage.getItem("empSize") || "null"); if (sz) { if (sz.w) P.style.width = sz.w + "px"; if (sz.h) { P.style.height = sz.h + "px"; P.style.maxHeight = "96vh"; P.classList.add("sized"); } } } catch (e) {}
+    P.querySelectorAll(".eg").forEach(function (g) {
+      g.addEventListener("mousedown", function (e) {
+        e.preventDefault(); e.stopPropagation();
+        var d = g.dataset.e, r = P.getBoundingClientRect(), sx = e.clientX, sy = e.clientY;
+        var L0 = r.left, T0 = r.top, W0 = r.width, H0 = r.height;
+        P.style.left = L0 + "px"; P.style.top = T0 + "px"; P.style.right = "auto"; P.style.bottom = "auto"; P.style.maxWidth = "none"; P.style.maxHeight = "96vh";
+        if (/[tb]/.test(d)) { P.style.height = H0 + "px"; P.classList.add("sized"); }
+        function mv(ev) {
+          var dx = ev.clientX - sx, dy = ev.clientY - sy, w, h;
+          if (/r/.test(d)) P.style.width = Math.max(380, Math.min(W0 + dx, innerWidth - L0 - 4)) + "px";
+          if (d === "l") { w = Math.max(380, Math.min(W0 - dx, L0 + W0)); P.style.width = w + "px"; P.style.left = L0 + W0 - w + "px"; }
+          if (d === "b" || d === "br") P.style.height = Math.max(200, Math.min(H0 + dy, innerHeight - T0)) + "px";
+          if (d === "t" || d === "tr") { h = Math.max(200, Math.min(H0 - dy, T0 + H0)); P.style.height = h + "px"; P.style.top = T0 + H0 - h + "px"; }
+        }
+        function up() { document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up);
+          try { localStorage.setItem("empSize", JSON.stringify({ w: parseFloat(P.style.width) || 0, h: parseFloat(P.style.height) || 0 })); } catch (x) {} }
+        document.addEventListener("mousemove", mv); document.addEventListener("mouseup", up);
+      });
+      g.addEventListener("dblclick", function () { P.style.width = ""; P.style.height = ""; P.style.maxWidth = ""; P.style.maxHeight = ""; P.classList.remove("sized"); try { localStorage.removeItem("empSize"); } catch (x) {} });
     });
   })();
 
