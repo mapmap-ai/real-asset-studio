@@ -35,8 +35,10 @@
   var thisYear = new Date().getFullYear();
 
   // ── 패널
+  if (!document.getElementById("rasFont")) { var fl = document.createElement("link"); fl.id = "rasFont"; fl.rel = "stylesheet";
+    fl.href = "https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap"; document.head.appendChild(fl); }   // 글꼴(2026-10-21) — 막히면 맑은 고딕
   var css = document.createElement("style");
-  css.textContent = "#vmc{position:fixed;right:16px;bottom:16px;z-index:2147483000;width:640px;max-width:calc(100vw - 32px);max-height:80vh;display:flex;flex-direction:column;background:#fff;color:#1d2433;border:1px solid #d0d5dd;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.25);font:13px/1.45 'Malgun Gothic',sans-serif}" +
+  css.textContent = "#vmc{position:fixed;right:16px;bottom:16px;z-index:2147483000;width:640px;max-width:calc(100vw - 32px);max-height:80vh;display:flex;flex-direction:column;background:#fff;color:#1d2433;border:1px solid #d0d5dd;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.25);font:13px/1.45 'Noto Sans KR','Malgun Gothic',sans-serif}" +
     "#vmc *{box-sizing:border-box;font-family:inherit}#vmc .hd{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#D9653B;color:#fff;border-radius:10px 10px 0 0;cursor:move;user-select:none}" +
     "#vmc .hd b{flex:1;font-size:14px}#vmc .hd button{background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0 4px}" +
     "#vmc .bd{padding:8px 10px;display:flex;flex-direction:column;gap:7px;overflow:auto}" +
@@ -467,7 +469,7 @@
     return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' + esc(sr.jibun) + " 실거래 비교사례</title>" +
       '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">' +
       ["leaflet/1.9.4/leaflet.min.js", "proj4js/2.11.0/proj4.min.js", "proj4leaflet/1.0.2/proj4leaflet.min.js"].map(function (u) { return '<script src="https://cdnjs.cloudflare.com/ajax/libs/' + u + '"></scr' + 'ipt>'; }).join("") +
-      "<style>body{margin:0;font:13px/1.5 'Malgun Gothic',sans-serif;color:#1d2433;background:#f6f7f9}header{padding:14px 18px;background:#fff;border-bottom:1px solid #e4e7ec}h1{font-size:18px;margin:0 0 4px}" +
+      '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap">' + "<style>body{margin:0;font:13px/1.5 'Noto Sans KR','Malgun Gothic',sans-serif;color:#1d2433;background:#f6f7f9}header{padding:14px 18px;background:#fff;border-bottom:1px solid #e4e7ec}h1{font-size:18px;margin:0 0 4px}" +
       ".kpi{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:6px}.kpi b{color:#A04626}" +
       "#mapbox{position:relative;height:58vh;background:#fff}#mapbox.big{position:fixed;inset:0;height:auto;z-index:9999}#mapbox:fullscreen{height:100vh}#map{position:absolute;inset:0}" +
       ".wrap{padding:12px 18px}.tbar{display:flex;align-items:center;gap:8px;margin-bottom:6px}.tbar b{flex:1;font-size:14px}" +

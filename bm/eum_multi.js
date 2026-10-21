@@ -40,7 +40,7 @@
         new ol.style.Style({
           geometry: pt,
           text: new ol.style.Text({
-            text: f.get("label"), font: "bold 13px 'Malgun Gothic',sans-serif",
+            text: f.get("label"), font: "bold 13px 'Noto Sans KR','Malgun Gothic',sans-serif",
             fill: new ol.style.Fill({ color: shade(E.color, .45) }), stroke: new ol.style.Stroke({ color: "#fff", width: 4 })
           })
         })
@@ -70,22 +70,33 @@
     kmap: [kakao(MTS + "PNG02/v26_blse3/latest/{z}/{y}/{x}.png")]
   };
   var bgAll = [].concat(BG.ksky, BG.kmap);
-  E.bg = "none"; E.op = 100;
+  // 카카오 배경(2026-10-21 사용자 요청): 토지이음 도면·이음지도 바탕을 모두 감추고 칠한 필지만 카카오 위에. 막대는 '배경 투명도'(카카오를 흐리게).
+  //   토지이음 도면만: 지금처럼 '도면 진하기'. 지도 바탕 칸(viewport) 을 흰색으로 덮어 그 아래 이음지도(네이버 지도 iframe)도 비치지 않게 한다.
+  E.bg = "none"; E.op = 100; E.bt = 0;
+  var kakaoOn = function () { return E.bg !== "none"; };
   function eumTiles() { return map.getLayers().getArray().filter(function (l) { return l instanceof ol.layer.Tile && bgAll.indexOf(l) < 0; }); }
+  function syncEum() {
+    var on = kakaoOn();
+    eumTiles().forEach(function (l) { if (l.getVisible() === on) l.setVisible(!on); if (!on && l.getOpacity() !== E.op / 100) l.setOpacity(E.op / 100); });
+    BG[E.bg].forEach(function (l) { l.setOpacity(1 - E.bt / 100); });
+    map.getViewport().style.background = on ? "#fff" : "";
+  }
   function applyBg() {
     bgAll.forEach(function (l) { map.removeLayer(l); });
     BG[E.bg].forEach(function (l, i) { l.setZIndex(-20 + i); map.addLayer(l); });
-    eumTiles().forEach(function (l) { l.setOpacity(E.op / 100); });
+    syncEum();
   }
-  setInterval(function () { eumTiles().forEach(function (l) { if (l.getOpacity() !== E.op / 100) l.setOpacity(E.op / 100); }); }, 1500);
+  setInterval(syncEum, 1500);   // 토지이음이 층을 다시 만들면 감추기·진하기를 다시 맞춘다
 
   // 고르기 모드 동안 토지이음 자체 클릭(한 필지 선택·팝업)을 막는다
   var origClick = $.fn.clickPnu;
   $.fn.clickPnu = function () { if (E.pick) return; return origClick.apply(this, arguments); };
 
   // ── 패널
+  if (!document.getElementById("rasFont")) { var fl = document.createElement("link"); fl.id = "rasFont"; fl.rel = "stylesheet";
+    fl.href = "https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap"; document.head.appendChild(fl); }   // 글꼴(2026-10-21) — 막히면 맑은 고딕
   var css = document.createElement("style");
-  css.textContent = "#emp{position:fixed;left:16px;bottom:16px;z-index:2147483000;width:600px;max-width:calc(100vw - 32px);max-height:72vh;display:flex;flex-direction:column;background:#fff;color:#1d2433;border:1px solid #d0d5dd;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.25);font:13px/1.45 'Malgun Gothic',sans-serif}" +
+  css.textContent = "#emp{position:fixed;left:16px;bottom:16px;z-index:2147483000;width:600px;max-width:calc(100vw - 32px);max-height:72vh;display:flex;flex-direction:column;background:#fff;color:#1d2433;border:1px solid #d0d5dd;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.25);font:13px/1.45 'Noto Sans KR','Malgun Gothic',sans-serif}" +
     "#emp *{box-sizing:border-box;font-family:inherit}#emp .hd{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#D9653B;color:#fff;border-radius:10px 10px 0 0;cursor:move;user-select:none}" +
     "#emp .hd b{flex:1;font-size:14px}#emp .hd button{background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0 4px}" +
     "#emp .bd{padding:8px 10px;display:flex;flex-direction:column;gap:6px;overflow:auto}#emp textarea{width:100%;height:58px;resize:vertical;border:1px solid #d0d5dd;border-radius:6px;padding:5px 7px;font-size:12.5px}" +
@@ -113,9 +124,9 @@
     '<div class="bd"><textarea placeholder="지번을 한 줄에 하나씩 (예: 용산구 한강로2가 424) · PNU 19자리도 됩니다"></textarea>' +
     '<div class="row"><button class="pri" data-a="add">목록 추가</button><button data-a="stopadd" class="on" hidden>추가 멈춤</button><button data-a="pick">지도 클릭으로 고르기</button><button data-a="fit">전체 보기</button>' +
     '<button data-a="copy">표 복사</button><button data-a="link">링크 복사</button><button data-a="clear">모두 지우기</button></div>' +
-    '<div class="row bgrow"><label>배경 <select data-x="bg"><option value="none">토지이음 도면만</option><option value="ksky">카카오 위성</option>' +
-    '<option value="kmap">카카오 일반지도</option></select></label>' +
-    '<label>도면 진하기 <input type="range" data-x="op" min="0" max="100" step="5" value="100"> <output>100%</output></label>' +
+    '<div class="row bgrow"><label>배경 <select data-x="bg"><option value="none">토지이음 도면만</option><option value="kmap">카카오 지도</option>' +
+    '<option value="ksky">카카오 위성</option></select></label>' +
+    '<label><span data-x="opl">도면 진하기</span> <input type="range" data-x="op" min="0" max="100" step="5" value="100"> <output>100%</output></label>' +
     '<label>필지 색 <input type="color" data-x="color" value="' + E.color + '"></label><button class="rs" data-a="color0" title="기본색으로 되돌리기">기본색</button></div>' +
     '<div class="msg" role="status"></div><div class="tw"><table><thead><tr><th><label class="sw" title="지도에 번호 표시 켜기/끄기">#<input type="checkbox" data-x="showNo" checked><i></i></label></th><th><label class="sw" title="지도에 지번 표시 켜기/끄기">지번<input type="checkbox" data-x="showJibun" checked><i></i></label></th><th>지목</th><th class="n">면적(㎡)</th><th class="n">평</th><th>용도지역</th><th class="n" title="원/㎡">공시지가</th><th></th></tr></thead>' +
     '<tbody></tbody><tfoot><tr><td></td><td class="cnt"></td><td></td><td class="n sum"></td><td class="n sump"></td><td></td><td class="n sumv"></td><td></td></tr></tfoot></table></div></div>';
@@ -353,12 +364,17 @@
   // ── 시작: 주소창 #multi= 또는 지난번 목록을 불러온다
   // 배경 고르기·도면 진하기
   var selBg = $p("[data-x=bg]"), rng = $p("[data-x=op]"), outOp = P.querySelector(".bgrow output");
-  function setOp(v) { E.op = +v; rng.value = v; outOp.textContent = v + "%"; eumTiles().forEach(function (l) { l.setOpacity(E.op / 100); }); }
+  // 막대 하나: 토지이음 도면만 = 도면 진하기(0~100), 카카오 = 배경 투명도(0~90)
+  function slider() {
+    var k = kakaoOn(), v = k ? E.bt : E.op;
+    $p("[data-x=opl]").textContent = k ? "배경 투명도" : "도면 진하기";
+    rng.max = k ? 90 : 100; rng.value = v; outOp.textContent = v + "%";
+  }
+  function setOp(v) { if (kakaoOn()) E.bt = +v; else E.op = +v; outOp.textContent = v + "%"; syncEum(); }
+  var saveBg = function () { try { localStorage.setItem(KEY + "Bg", JSON.stringify([E.bg, E.op, E.bt])); } catch (e) {} };
   selBg.onchange = function () {
     E.bg = selBg.value;
-    if (E.bg === "none") setOp(100); else if (E.op > 70) setOp(45);
-    applyBg();
-    try { localStorage.setItem(KEY + "Bg", JSON.stringify([E.bg, E.op])); } catch (e) {}
+    applyBg(); slider(); saveBg();
     msg(E.bg.charAt(0) === "k" ? "카카오 배경을 쓰면 토지이음 '저장' 단추가 막힙니다(새로고침하면 풀림). 그림 파일이 필요하면 Win+Shift+S 로 캡처하세요." : "");
   };
   rng.oninput = function () { setOp(rng.value); };
@@ -379,8 +395,8 @@
       try { localStorage.setItem(KEY + "Lbl", JSON.stringify([E.showNo, E.showJibun])); } catch (e) {}
     };
   });
-  rng.onchange = function () { try { localStorage.setItem(KEY + "Bg", JSON.stringify([E.bg, E.op])); } catch (e) {} };
-  (function () { try { var v = JSON.parse(localStorage.getItem(KEY + "Bg") || "null"); if (v && BG[v[0]]) { selBg.value = v[0]; E.bg = v[0]; applyBg(); setOp(v[1]); } } catch (e) {} })();
+  rng.onchange = saveBg;
+  (function () { try { var v = JSON.parse(localStorage.getItem(KEY + "Bg") || "null"); if (v && BG[v[0]]) { selBg.value = v[0]; E.bg = v[0]; E.op = +v[1] || 100; E.bt = +v[2] || 0; applyBg(); } } catch (e) {} slider(); })();
 
   var start = (/[#&]multi=([\d,]+)/.exec(location.hash) || [])[1];
   var keys = start ? start.split(",") : (function () { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { return []; } })();
