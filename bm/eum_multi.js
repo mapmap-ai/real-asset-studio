@@ -159,7 +159,7 @@
     "#emp .sw i:after{content:'';position:absolute;left:2px;top:2px;width:10px;height:10px;border-radius:50%;background:#fff;transition:left .15s}" +
     "#emp .sw input:checked+i{background:#D9653B}#emp .sw input:checked+i:after{left:12px}#emp .sw input:focus-visible+i{outline:2px solid #EDB49C}" +
     "#emp td.xc{width:1%;text-align:right;padding-right:2px}#emp .x{border:none;background:none;color:#98a2b3;font-size:15px;cursor:pointer}#emp .x:hover{color:#e5383b}#emp .tw{overflow:auto;max-height:34vh}" +
-    "#emp .bgrow{align-items:center;gap:12px;font-size:12.5px}#emp .bgrow select{font-size:12.5px;padding:3px}#emp .bgrow input{vertical-align:middle;width:110px}#emp input[type=range]{accent-color:var(--emp-c,#D9653B)}" +
+    "#emp .bgrow{align-items:center;gap:12px;font-size:12.5px}#emp .bgrow select{font-size:12.5px;padding:3px}#emp .bgrow input{vertical-align:middle;width:110px}#emp input[type=range]{accent-color:#D9653B}" +
     "#emp .bgdd{position:relative}#emp .bgsum{max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}" +
     "#emp .bgl{position:fixed;z-index:2147483002;width:366px;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.18);padding:6px 10px}" +
     "#emp table.bgt{width:344px;table-layout:fixed!important;border-collapse:collapse;font-size:12.5px}#emp table.bgt td{border-bottom:1px solid #f0f1f3;padding:5px 2px;text-align:left;white-space:nowrap;vertical-align:middle;width:auto}" +
@@ -169,7 +169,7 @@
     "#emp.min .bd{display:none}body.emp-zone #gisMapContainer canvas{cursor:crosshair!important}" +
     ".emp-dbox{border:2px dashed #1d2433;background:rgba(217,101,59,.08)}#empZone{position:fixed;z-index:2147483001;width:260px;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.25);padding:9px 11px;font:13px/1.55 'Noto Sans KR','Malgun Gothic',sans-serif;color:#1d2433}" +
     "#empZone b{display:block;color:#A04626;font-size:14px}#empZone .s{color:#667085;font-size:11.5px}#empZone button{margin:6px 6px 0 0;font:inherit;font-size:12px;padding:3px 8px;border:1px solid #d0d5dd;border-radius:5px;background:#fff;cursor:pointer}" +
-    "#empZone button[data-z=num]{border-color:#D9653B;background:#D9653B;color:#fff}#emp .row button.on[data-a=zone]{background:#1d2433;border-color:#1d2433;color:#fff}" +
+    "#empZone button[data-z=num]{border-color:#D9653B;background:#D9653B;color:#fff}#emp .row button[data-a=zoneclr]{color:#A04626}#emp .row button.on[data-a=zone]{background:#1d2433;border-color:#1d2433;color:#fff}" +
     "#emp.min .bd{display:none}body.emp-pick #gisMapContainer,body.emp-pick canvas{cursor:crosshair!important}";
   document.head.appendChild(css);
 
@@ -178,7 +178,7 @@
   P.innerHTML = '<div class="eg" data-e="l"></div><div class="eg" data-e="r"></div><div class="eg" data-e="t"></div><div class="eg" data-e="b"></div><div class="eg" data-e="tr"></div><div class="eg" data-e="br"></div>' +
     '<div class="hd"><b>여러 필지 선택</b><button data-a="reset" title="새로고침 — 고른 필지·배경·이름표를 지우고 처음 상태로">↻</button><button data-a="min" title="접기">–</button><button data-a="close" title="닫기">×</button></div>' +
     '<div class="bd"><textarea placeholder="지번을 한 줄에 하나씩 (예: 용산구 한강로2가 424) · PNU 19자리도 됩니다"></textarea>' +
-    '<div class="row"><button class="pri" data-a="add">목록 추가</button><button data-a="stopadd" class="on" hidden>추가 멈춤</button><button data-a="pick">지도 클릭으로 고르기</button><button data-a="fit">전체 보기</button><button data-a="zone" title="지도에 네모를 그려 그 안 필지의 수·면적·공시지가 합계를 보고, 구역별로 번호를 다시 매깁니다">네모로 구역 묶기</button>' +
+    '<div class="row"><button class="pri" data-a="add">목록 추가</button><button data-a="stopadd" class="on" hidden>추가 멈춤</button><button data-a="pick">지도 클릭으로 고르기</button><button data-a="fit">전체 보기</button><button data-a="zone" title="지도에 마우스로 구역 둘레를 그려 그 안 필지의 수·면적·공시지가 합계를 보고, 구역별로 번호·색을 정합니다">구역 묶기</button><button data-a="zoneclr" hidden title="그린 구역을 모두 지우고 다시 그립니다">구역 지우기</button>' +
     '<button data-a="mapopen" class="pri2" title="칠한 필지를 새 창의 선명한 카카오 지도 위에 — 캡처하기 좋게">지도 열기</button><button data-a="copy">표 복사</button><button data-a="link">링크 복사</button><button data-a="clear">모두 지우기</button></div>' +
     '<div class="row bgrow"><div class="bgdd"><button type="button" data-a="bgdd" class="bgsum" title="배경을 여러 개 겹치고 저마다 투명도를 정합니다">배경</button><div class="bgl" hidden>' +
     '<table class="bgt"><colgroup><col style="width:150px"><col style="width:46px"><col style="width:108px"><col style="width:40px"></colgroup>' +
@@ -564,51 +564,71 @@
     next();
   }
 
-  // ── 네모로 구역 묶기(2026-10-23 사용자 요청): 단추를 켜고 지도에 네모를 끌어 그리면 그 안(필지 가운데가 네모 안)의 포함 필지 수·면적·공시지가 합계를
-  //   커서 옆 작은 창에 보인다. [이 구역 번호 매기기] = 그 필지들을 지금까지 묶은 구역 다음 번호로 차례로(첫 구역 1~8, 다음 구역 9~14 …). 네모는 지도에 남는다
+  // ── 구역 묶기(2026-10-23 사용자 요청, 2026-10-24 네모 → 마우스로 그리는 자유 도형): 단추를 켜고 지도 위에서 누른 채 끌어 둘레를 그리면
+  //   그 안(필지 가운데가 도형 안)의 포함 필지 수·면적·공시지가 합계 창이 뜬다. 도형마다 '구역 A·B·C…' 이름을 경계선 위쪽에 붙인다.
+  //   [번호 매기기] = 그 필지들을 지금까지 묶은 구역 다음 번호로 차례로. [이 구역 고르기] = 그 필지들을 골라 '필지 색'을 바꾸면 그 구역만 바뀐다.
+  //   단추를 끄면 도형을 감추고(다시 켜면 보임), [구역 지우기] = 도형·구역 묶음을 모두 지워 다시 그린다(목록 번호 순서는 그대로)
   var zsrc = new ol.source.Vector(), zlayer = new ol.layer.Vector({ source: zsrc, style: function (f) {
-    return new ol.style.Style({ stroke: new ol.style.Stroke({ color: "#1d2433", width: 2, lineDash: [8, 6] }), fill: new ol.style.Fill({ color: "rgba(29,36,51,.03)" }),
-      text: new ol.style.Text({ text: f.get("label") || "", font: "bold 13px 'Noto Sans KR','Malgun Gothic',sans-serif", textAlign: "left", textBaseline: "top", offsetX: 6, offsetY: 6,
-        fill: new ol.style.Fill({ color: "#1d2433" }), stroke: new ol.style.Stroke({ color: "#fff", width: 4 }) }), geometry: function (ft) { return ft.getGeometry(); } });
+    var g = f.getGeometry(), cs = g.getCoordinates()[0] || [], top = cs.reduce(function (a, c) { return !a || c[1] > a[1] ? c : a; }, null);
+    return [new ol.style.Style({ stroke: new ol.style.Stroke({ color: "#1d2433", width: 2, lineDash: [8, 6] }), fill: new ol.style.Fill({ color: "rgba(29,36,51,.03)" }) }),
+      new ol.style.Style({ geometry: top ? new ol.geom.Point(top) : undefined,   // 이름은 도형의 맨 위 꼭짓점(경계선) 바로 위에
+        text: new ol.style.Text({ text: f.get("label") || "", font: "bold 14px 'Noto Sans KR','Malgun Gothic',sans-serif", textBaseline: "bottom", offsetY: -6,
+          fill: new ol.style.Fill({ color: "#1d2433" }), stroke: new ol.style.Stroke({ color: "#fff", width: 5 }) }) })];
   } });
   zlayer.set("name", "eumMultiZone"); map.addLayer(zlayer); zlayer.setZIndex(9998);
   setInterval(function () { if (map.getLayers().getArray().indexOf(zlayer) < 0) { map.addLayer(zlayer); zlayer.setZIndex(9998); } }, 1500);
-  var dbox = new ol.interaction.DragBox({ condition: function () { return true; }, className: "ol-dragbox emp-dbox",
-    style: new ol.style.Style({ stroke: new ol.style.Stroke({ color: "#1d2433", width: 2, lineDash: [8, 6] }), fill: new ol.style.Fill({ color: "rgba(217,101,59,.08)" }) }) });
+  var draw = new ol.interaction.Draw({ type: "Polygon", freehandCondition: function () { return true; }, condition: function () { return true; },
+    style: new ol.style.Style({ stroke: new ol.style.Stroke({ color: "#1d2433", width: 2, lineDash: [8, 6] }), fill: new ol.style.Fill({ color: "rgba(217,101,59,.10)" }),
+      image: new ol.style.Circle({ radius: 3, fill: new ol.style.Fill({ color: "#1d2433" }) }) }) });
   var zp = document.createElement("div"); zp.id = "empZone"; zp.hidden = true; document.body.appendChild(zp);
+  var zName = function (n) { return "구역 " + String.fromCharCode(64 + ((n - 1) % 26) + 1) + (n > 26 ? Math.ceil(n / 26) : ""); };   // 1 → 구역 A
   function hideZp() { zp.hidden = true; }
   function zoneMode(on) {
     E.zoneOn = on; var b = $p("[data-a=zone]"); if (b) b.classList.toggle("on", on);
-    if (on) map.addInteraction(dbox); else { map.removeInteraction(dbox); hideZp(); }
-    zlayer.setVisible(on);   // 끄면 점선 네모를 지도에서 감춘다(2026-10-24 사용자 요청) — 다시 켜면 그린 네모가 다시 보인다
+    if (on) map.addInteraction(draw); else { map.removeInteraction(draw); hideZp(); }
+    zlayer.setVisible(on);   // 끄면 그린 도형을 지도에서 감춘다(2026-10-24 사용자 요청) — 다시 켜면 다시 보인다
+    var zc = $p("[data-a=zoneclr]"); if (zc) zc.hidden = !on;
     document.body.classList.toggle("emp-zone", on);
-    msg(on ? "지도에 네모를 끌어 그리세요 — 그 안 필지의 수·면적·공시지가 합계가 뜹니다. 끝나면 [네모로 구역 묶기]를 다시 눌러 끄세요." : "");
+    msg(on ? "지도 위에서 마우스를 누른 채 끌어 구역 둘레를 그리세요(손을 떼면 닫힘) — 그 안 필지의 수·면적·공시지가 합계가 뜹니다. 끝나면 [구역 묶기]를 다시 눌러 끄세요." : "");
   }
-  dbox.on("boxend", function () {
-    var geom = dbox.getGeometry(), ext = geom.getExtent();
-    var hits = IL().filter(function (p) { return ol.extent.containsCoordinate(ext, ol.extent.getCenter(p.feature.getGeometry().getExtent())); });
-    var fz = new ol.Feature(geom.clone()); zsrc.addFeature(fz);
+  function zoneClear() {   // 도형·묶음을 모두 지우고 처음부터 다시 그린다
+    zsrc.clear(); hideZp(); E.ng = 0; E.zc = 0; E.list.forEach(function (p) { delete p.grp; }); E.multi = []; render();
+    msg("구역을 모두 지웠습니다. 다시 그리세요(목록 번호 순서는 그대로).");
+  }
+  function zonePnus(fz) { return E.list.filter(function (p) { return p.grp === fz.get("grp"); }).map(function (p) { return p.pnu; }); }
+  draw.on("drawend", function (ev) {
+    var fz = ev.feature, geom = fz.getGeometry(), ext = geom.getExtent();
+    E.zc = (E.zc || 0) + 1; var nm = zName(E.zc); fz.set("label", nm); fz.set("zid", E.zc);
+    var hits = IL().filter(function (p) { return geom.intersectsCoordinate(ol.extent.getCenter(p.feature.getGeometry().getExtent())); });
+    setTimeout(function () { zsrc.addFeature(fz); }, 0);   // Draw 가 끝난 뒤 우리 층에 남긴다
     var sum = 0, val = 0, noP = 0; hits.forEach(function (p) { sum += +p.area || 0; if (p.area && p.price) val += p.area * p.price; else noP++; });
-    var fresh = hits.filter(function (p) { return !p.grp; });
+    var fresh = hits.filter(function (p) { return !p.grp; }), done = E.list.filter(function (p) { return p.grp; }).length;
     var px = map.getPixelFromCoordinate(ol.extent.getTopRight(ext)), vr = map.getViewport().getBoundingClientRect();
-    zp.style.left = Math.min(innerWidth - 270, Math.max(4, vr.left + px[0] + 10)) + "px"; zp.style.top = Math.min(innerHeight - 170, Math.max(4, vr.top + px[1])) + "px";
-    zp.innerHTML = "<b>네모 안 " + hits.length + "필지</b><div>면적 " + fmt(sum) + "㎡ (" + fmt(sum * 0.3025) + "평)</div><div>공시지가 합계 " + fmt(val / 1e6) + " 백만원" + (noP ? " *" + noP + "필지 공시지가 없음" : "") + "</div>" +
-      (fresh.length ? '<button data-z="num">이 구역 번호 매기기 (' + (E.list.filter(function (p) { return p.grp; }).length + 1) + "~" + (E.list.filter(function (p) { return p.grp; }).length + fresh.length) + "번)</button>" : "") +
+    zp.style.left = Math.min(innerWidth - 270, Math.max(4, vr.left + px[0] + 10)) + "px"; zp.style.top = Math.min(innerHeight - 200, Math.max(4, vr.top + px[1])) + "px";
+    zp.innerHTML = "<b>" + nm + " · " + hits.length + "필지</b><div>면적 " + fmt(sum) + "㎡ (" + fmt(sum * 0.3025) + "평)</div><div>공시지가 합계 " + fmt(val / 1e6) + " 백만원" + (noP ? " *" + noP + "필지 공시지가 없음" : "") + "</div>" +
+      (fresh.length ? '<button data-z="num">번호 매기기 (' + (done + 1) + "~" + (done + fresh.length) + "번)</button>" : "") +
+      (hits.length ? '<button data-z="pick" title="이 구역 필지를 골라 둡니다 — 그다음 \'필지 색\'을 바꾸면 이 구역만 바뀝니다">이 구역 고르기(색 바꾸기)</button>' : "") +
       (hits.length > fresh.length ? '<div class="s">이미 다른 구역에 묶인 ' + (hits.length - fresh.length) + "필지는 번호를 그대로 둡니다</div>" : "") +
-      '<button data-z="del">이 네모 지우기</button><button data-z="x">닫기</button>';
+      '<button data-z="del">이 구역 지우기</button><button data-z="x">닫기</button>';
     zp.hidden = false;
+    var pickZone = function () {
+      E.multi = hits.map(function (p) { return p.pnu; }); E.sel = null; render();
+      msg(nm + " " + hits.length + "필지를 골랐습니다 — '필지 색'을 바꾸면 이 구역만 바뀝니다(Esc = 고르기 풀기).");
+    };
     zp.onclick = function (e) {
       var z = e.target.getAttribute("data-z"); if (!z) return;
       if (z === "num") {
-        var n = ++E.ng, at = E.list.filter(function (p) { return p.grp; }).length;
-        fresh.forEach(function (p) { p.grp = n; });
+        var at = E.list.filter(function (p) { return p.grp; }).length; E.ng++;
+        fresh.forEach(function (p) { p.grp = fz.get("zid"); });
+        fz.set("grp", fz.get("zid"));
         E.list = E.list.filter(function (p) { return fresh.indexOf(p) < 0; });
         Array.prototype.splice.apply(E.list, [at, 0].concat(fresh));
-        fz.set("label", "구역 " + n + " (" + (at + 1) + "~" + (at + fresh.length) + "번)"); zsrc.changed();
-        render(); msg("구역 " + n + ": " + fresh.length + "필지를 " + (at + 1) + "~" + (at + fresh.length) + "번으로 매겼습니다. 다음 네모를 그리면 그다음 번호로 이어집니다.");
+        render(); pickZone();
+        msg(nm + ": " + fresh.length + "필지를 " + (at + 1) + "~" + (at + fresh.length) + "번으로 매기고 골라 두었습니다 — '필지 색'을 바꾸면 이 구역만 바뀝니다. 다음 구역을 그리면 그다음 번호로 이어집니다.");
         hideZp();
       }
-      if (z === "del") { zsrc.removeFeature(fz); hideZp(); }
+      if (z === "pick") { pickZone(); hideZp(); }
+      if (z === "del") { zsrc.removeFeature(fz); if (fz.get("grp")) { E.list.forEach(function (p) { if (p.grp === fz.get("grp")) delete p.grp; }); render(); } hideZp(); }
       if (z === "x") hideZp();
     };
   });
@@ -665,6 +685,7 @@
     }
     if (a === "clear") { if (!confirm("고른 필지를 모두 지울까요?")) return; src.clear(); zsrc.clear(); hideZp(); E.list = []; E.sel = null; E.multi = []; E.ng = 0; saveOff(); render(); msg(""); }
     if (a === "zone") zoneMode(!E.zoneOn);
+    if (a === "zoneclr") { if (zsrc.getFeatures().length && confirm("그린 구역을 모두 지우고 다시 그릴까요? (목록 번호 순서는 그대로)")) zoneClear(); }
     if (a === "bgdd") {
       var bl = $p(".bgl"), br = e.target.getBoundingClientRect(); bl.hidden = !bl.hidden;
       if (!bl.hidden) { bl.style.left = Math.max(4, Math.min(br.left, innerWidth - 376)) + "px"; var h = bl.offsetHeight; bl.style.top = (br.bottom + 4 + h > innerHeight ? Math.max(4, br.top - 4 - h) : br.bottom + 4) + "px"; }
