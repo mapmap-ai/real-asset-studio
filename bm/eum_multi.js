@@ -83,44 +83,50 @@
   //   (누구나 볼 수 있고 하루 이용량을 나눠 씀, 서비스 URL www.eum.go.kr). 이 브라우저에 따로 넣은 키(vworldKey)가 있으면 그것을 먼저 쓴다
   var VWORLD_DEFAULT = "8C3C5E24-C965-48D7-A2C9-8A2B2E647D37";
   var vworldKey = function () { try { return localStorage.getItem("vworldKey") || VWORLD_DEFAULT; } catch (e) { return VWORLD_DEFAULT; } };   // 지도 열기 창을 열 때마다 새로 읽는다
-  var BG = {
-    none: [],
-    ksky: [kakao("https://map.kakaocdn.net/map_skyview_hd/L{z}/{y}/{x}.jpg?v=160107"), kakao(MTS + "PNG_SKYH02/v24_kikr3/latest/{z}/{y}/{x}.png")],
-    kmap: [kakao(MTS + "PNG02/v26_blse3/latest/{z}/{y}/{x}.png")],
-    // 지적도(백지도, 2026-10-23 사용자 요청): 토지이음 자체 '연속지적도만 보기'(필지 경계·지번·지목)를 켜고, 흰 바탕에 흑백으로 그린다(키 필요 없음).
-    //   카카오 지적편집도(PNG_CAD02)는 필지 선이 거의 안 보이고 용도지역 색·지하철이 섞여 백지도로 못 쓴다(시험해 봄)
-    jijuk: []
+  // ── 배경 겹치기(2026-10-24 사용자 요청): 네 가지를 함께 켤 수 있고 저마다 투명도(0% = 진하게). 아래 → 위 순서로 쌓는다.
+  //   토지이음 도면 = 토지이음 자체 층(용도지역 색). 지적도(백지도) = 브이월드 연속지적도 WMS 를 흑백으로 — 다른 지도 위에 얹을 수 있게
+  //   토지이음 자체 '연속지적도만 보기'(같은 층을 바꿔 그림) 대신 따로 받는다. 카카오·브이월드 조각은 CORS 머리글이 없어 켜면 토지이음 '저장'이 막힌다.
+  var vworldLayer = function () {
+    // OL 은 EPSG:5179 를 '북·동' 축으로 알아 WMS 1.3.0 BBOX 를 y,x 로 보낸다 → 브이월드는 x,y 로 읽어 엉뚱한 곳(빈 땅)을 준다(2026-10-24).
+    //   조각을 부르기 직전에 BBOX 네 값을 x,y 순서로 바꿔 넣는다
+    var swapBbox = function (tile, src) {
+      tile.getImage().src = src.replace(/BBOX=([^&]+)/, function (m, v) { var a = decodeURIComponent(v).split(","); return "BBOX=" + [a[1], a[0], a[3], a[2]].join(","); });
+    };
+    var l = new ol.layer.Tile({ source: new ol.source.TileWMS({ url: "https://api.vworld.kr/req/wms", projection: map.getView().getProjection(), tileLoadFunction: swapBbox,
+      params: { LAYERS: "lp_pa_cbnd_bubun,lp_pa_cbnd_bonbun", STYLES: "lp_pa_cbnd_bubun,lp_pa_cbnd_bonbun", FORMAT: "image/png", TRANSPARENT: true, VERSION: "1.3.0",
+        KEY: vworldKey(), DOMAIN: "www.eum.go.kr" } }) });   // 1.3.0 만 받는다(1.1.1 은 거절). EPSG:5179 bbox 는 x,y 순서 그대로 됨(2026-10-24 확인)
+    l.on("precompose", function (e) { e.context.filter = "grayscale(1) contrast(1.6)"; });
+    l.on("postcompose", function (e) { e.context.filter = "none"; });
+    return l;
   };
-  var bgAll = [].concat(BG.ksky, BG.kmap);
-  // 카카오 배경(2026-10-21 사용자 요청): 토지이음 도면·이음지도 바탕을 모두 감추고 칠한 필지만 카카오 위에. 막대는 '배경 투명도'(카카오를 흐리게).
-  //   토지이음 도면만: 지금처럼 '도면 진하기'. 지도 바탕 칸(viewport) 을 흰색으로 덮어 그 아래 이음지도(네이버 지도 iframe)도 비치지 않게 한다.
-  E.bg = "none"; E.op = 100; E.bt = 0;
-  var kakaoOn = function () { return E.bg === "ksky" || E.bg === "kmap"; };
-  // 토지이음 '연속지적도만 보기' 켜고 끄기(왼쪽 도면 보기 설정의 em.type0 — 누를 때마다 바뀐다). 우리가 켠 것만 되돌린다
-  function eumJijuk(on) {
-    var em = document.querySelector("li.tType em.type0"); if (!em) return;
-    if (em.classList.contains("on") !== on) { if (on || E.jjOurs) em.click(); E.jjOurs = on; }
-  }
-  var GRAY = "grayscale(1) brightness(1.18) contrast(1.35)";
+  var BGL = [   // 아래 → 위
+    { k: "ksky", name: "카카오 위성", layers: [kakao("https://map.kakaocdn.net/map_skyview_hd/L{z}/{y}/{x}.jpg?v=160107"), kakao(MTS + "PNG_SKYH02/v24_kikr3/latest/{z}/{y}/{x}.png")] },
+    { k: "kmap", name: "카카오 지도", layers: [kakao(MTS + "PNG02/v26_blse3/latest/{z}/{y}/{x}.png")] },
+    { k: "eum", name: "토지이음 도면", layers: null },
+    { k: "jijuk", name: "지적도(백지도)", layers: [vworldLayer()] }
+  ];
+  var BGK = {}; BGL.forEach(function (b) { BGK[b.k] = b; });
+  var bgAll = [].concat(BGK.ksky.layers, BGK.kmap.layers, BGK.jijuk.layers);
+  var BG_DEF = function () { return { on: { eum: true }, t: { ksky: 0, kmap: 0, eum: 0, jijuk: 0 } }; };
+  E.bgs = BG_DEF();
+  var bgOn = function (k) { return !!E.bgs.on[k]; };
+  var extOn = function () { return bgOn("ksky") || bgOn("kmap") || bgOn("jijuk"); };   // 우리 조각을 하나라도 켰는가(저장 막힘 안내)
   function eumTiles() { return map.getLayers().getArray().filter(function (l) { return l instanceof ol.layer.Tile && bgAll.indexOf(l) < 0; }); }
   function syncEum() {
-    var on = kakaoOn();
-    eumTiles().forEach(function (l) {
-      if (l.getVisible() === on) l.setVisible(!on); if (!on && l.getOpacity() !== E.op / 100) l.setOpacity(E.op / 100);
-      if (!l.__gray) {   // 지적도(백지도)일 때만 토지이음 도면을 흑백으로(지목 색 → 옅은 회색, 경계·지번은 진하게)
-        l.__gray = true;
-        l.on("precompose", function (e) { if (E.bg === "jijuk") e.context.filter = GRAY; });
-        l.on("postcompose", function (e) { e.context.filter = "none"; });
-      }
-    });
-    BG[E.bg].forEach(function (l) { l.setOpacity(1 - E.bt / 100); });
-    map.getViewport().style.background = on || E.bg === "jijuk" ? "#fff" : "";
+    var eo = bgOn("eum"), ea = 1 - E.bgs.t.eum / 100;
+    eumTiles().forEach(function (l) { if (l.getVisible() !== eo) l.setVisible(eo); if (eo && l.getOpacity() !== ea) l.setOpacity(ea); });
+    BGL.forEach(function (b) { if (b.layers) b.layers.forEach(function (l) { l.setOpacity(1 - E.bgs.t[b.k] / 100); }); });
+    // 토지이음 바탕지도(네이버, 지도 칸 아래)는 '토지이음 도면'만 쓸 때(카카오 없이)만 비친다. 그 밖에는 흰 바탕으로 덮는다
+    map.getViewport().style.background = eo && !bgOn("ksky") && !bgOn("kmap") ? "" : "#fff";
   }
   function applyBg() {
-    eumJijuk(E.bg === "jijuk");
     bgAll.forEach(function (l) { map.removeLayer(l); });
-    BG[E.bg].forEach(function (l, i) { l.setZIndex(-20 + i); map.addLayer(l); });
-    syncEum(); map.render();
+    var z = -20;
+    BGL.forEach(function (b) {
+      if (!b.layers || !bgOn(b.k)) return;
+      b.layers.forEach(function (l) { l.setZIndex(b.k === "jijuk" ? 50 : z++); map.addLayer(l); });   // 지적도는 토지이음 도면 위
+    });
+    syncEum(); map.render(); bgSum();
   }
   setInterval(syncEum, 1500);   // 토지이음이 층을 다시 만들면 감추기·진하기를 다시 맞춘다
 
@@ -144,7 +150,7 @@
     "#emp .row button.pri{background:#D9653B;border-color:#D9653B;color:#fff}#emp .row button.pri2{border-color:#D9653B;color:#D9653B;font-weight:700}#emp .row button.on{background:#fee2e2;border-color:#e5383b;color:#b91c1c;font-weight:700}" +
     "#emp .msg{min-height:16px;font-size:12px;color:#b45309}#emp table{border-collapse:collapse;width:100%;font-size:12px;table-layout:auto!important}#emp th,#emp td{width:1%}#emp th:nth-child(2),#emp td:nth-child(2){width:auto}" +
     "#emp th,#emp td{border-bottom:1px solid #eaecf0;padding:4px 5px;text-align:left;white-space:nowrap}#emp th{background:#f6f7f9;position:sticky;top:0}" +
-    "#emp td.n,#emp th.n{text-align:right}#emp td.z{white-space:normal;min-width:86px;max-width:130px}#emp tbody tr{cursor:pointer;user-select:none}#emp tbody tr:hover td{background:#f3f6fb}#emp tr.sel td{background:#fff7d6}#emp tr.off td{color:#98a2b3}#emp tr.off .no{background:#d0d5dd}#emp input.inc{margin:0 4px 0 0;vertical-align:-2px;accent-color:#D9653B}" +
+    "#emp td.n,#emp th.n{text-align:right}#emp td.z{white-space:normal;min-width:86px;max-width:130px}#emp .tw tbody tr{cursor:pointer;user-select:none}#emp .tw tbody tr:hover td{background:#f3f6fb}#emp tr.sel td{background:#fff7d6}#emp tr.off td{color:#98a2b3}#emp tr.off .no{background:#d0d5dd}#emp input.inc{margin:0 4px 0 0;vertical-align:-2px;accent-color:#D9653B}" +
     "#emp .gr{display:inline-block;width:12px;margin-right:3px;color:#b0b7c3;cursor:grab;font-size:13px;user-select:none}#emp tr:hover .gr{color:#475467}" +
     "#emp tr.drag td{opacity:.35}#emp tr.drb td{box-shadow:inset 0 3px 0 var(--emp-c,#D9653B)}#emp tr.dra td{box-shadow:inset 0 -3px 0 var(--emp-c,#D9653B)}" +
     "#emp tfoot td{font-weight:700;background:#f6f7f9}#emp tfoot td.sumv{width:auto}#emp .no{display:inline-block;min-width:19px;height:19px;line-height:19px;border-radius:10px;background:var(--emp-c,#D9653B);color:#fff;text-align:center;font-size:11px;font-weight:700}" +
@@ -154,6 +160,11 @@
     "#emp .sw input:checked+i{background:#D9653B}#emp .sw input:checked+i:after{left:12px}#emp .sw input:focus-visible+i{outline:2px solid #EDB49C}" +
     "#emp td.xc{width:1%;text-align:right;padding-right:2px}#emp .x{border:none;background:none;color:#98a2b3;font-size:15px;cursor:pointer}#emp .x:hover{color:#e5383b}#emp .tw{overflow:auto;max-height:34vh}" +
     "#emp .bgrow{align-items:center;gap:12px;font-size:12.5px}#emp .bgrow select{font-size:12.5px;padding:3px}#emp .bgrow input{vertical-align:middle;width:110px}#emp input[type=range]{accent-color:var(--emp-c,#D9653B)}" +
+    "#emp .bgdd{position:relative}#emp .bgsum{max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}" +
+    "#emp .bgl{position:fixed;z-index:2147483002;width:366px;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.18);padding:6px 10px}" +
+    "#emp table.bgt{width:344px;table-layout:fixed!important;border-collapse:collapse;font-size:12.5px}#emp table.bgt td{border-bottom:1px solid #f0f1f3;padding:5px 2px;text-align:left;white-space:nowrap;vertical-align:middle;width:auto}" +
+    "#emp table.bgt label{display:inline;font-weight:500;cursor:pointer;margin:0;padding:0}#emp table.bgt td.bs{color:#667085;font-size:11.5px}#emp table.bgt td.bo{text-align:right;font-size:11.5px;color:#475467}" +
+    "#emp table.bgt input[type=range]{width:100px;margin:0;accent-color:#D9653B;vertical-align:middle}#emp table.bgt input[type=checkbox]{accent-color:#D9653B;margin:0 4px 0 0;vertical-align:-2px;width:14px;height:14px;padding:0;float:none;position:static}#emp table.bgt label{text-indent:0;letter-spacing:0}#emp .bgn{color:#98a2b3;font-size:11px;padding-top:4px}" +
     "#emp .bgrow input[type=color]{width:30px;height:22px;padding:0 1px;border:1px solid #d0d5dd;border-radius:4px;cursor:pointer;background:#fff}#emp .bgrow .rs{border:none;background:none;color:#667085;font-size:11.5px;cursor:pointer;text-decoration:underline;padding:0}" +
     "#emp.min .bd{display:none}body.emp-zone #gisMapContainer canvas{cursor:crosshair!important}" +
     ".emp-dbox{border:2px dashed #1d2433;background:rgba(217,101,59,.08)}#empZone{position:fixed;z-index:2147483001;width:260px;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.25);padding:9px 11px;font:13px/1.55 'Noto Sans KR','Malgun Gothic',sans-serif;color:#1d2433}" +
@@ -169,9 +180,11 @@
     '<div class="bd"><textarea placeholder="지번을 한 줄에 하나씩 (예: 용산구 한강로2가 424) · PNU 19자리도 됩니다"></textarea>' +
     '<div class="row"><button class="pri" data-a="add">목록 추가</button><button data-a="stopadd" class="on" hidden>추가 멈춤</button><button data-a="pick">지도 클릭으로 고르기</button><button data-a="fit">전체 보기</button><button data-a="zone" title="지도에 네모를 그려 그 안 필지의 수·면적·공시지가 합계를 보고, 구역별로 번호를 다시 매깁니다">네모로 구역 묶기</button>' +
     '<button data-a="mapopen" class="pri2" title="칠한 필지를 새 창의 선명한 카카오 지도 위에 — 캡처하기 좋게">지도 열기</button><button data-a="copy">표 복사</button><button data-a="link">링크 복사</button><button data-a="clear">모두 지우기</button></div>' +
-    '<div class="row bgrow"><label>배경 <select data-x="bg"><option value="none">토지이음 도면만</option><option value="kmap">카카오 지도</option><option value="jijuk">지적도(백지도)</option>' +
-    '<option value="ksky">카카오 위성</option></select></label>' +
-    '<label><span data-x="opl">도면 진하기</span> <input type="range" data-x="op" min="0" max="100" step="5" value="100"> <output>100%</output></label>' +
+    '<div class="row bgrow"><div class="bgdd"><button type="button" data-a="bgdd" class="bgsum" title="배경을 여러 개 겹치고 저마다 투명도를 정합니다">배경</button><div class="bgl" hidden>' +
+    '<table class="bgt"><colgroup><col style="width:150px"><col style="width:46px"><col style="width:108px"><col style="width:40px"></colgroup>' +
+    BGL.slice().reverse().map(function (b) {   // 위에 그려지는 것부터(토지이음 CSS 가 div·label 배치를 흐트러뜨려 표로 짠다)
+      return '<tr><td><label><input type="checkbox" data-bk="' + b.k + '"> ' + b.name + '</label></td><td class="bs">투명도</td><td><input type="range" data-bt="' + b.k + '" min="0" max="' + (b.k === "eum" ? 100 : 90) + '" step="5" value="0"></td><td class="bo"><output data-bo="' + b.k + '">0%</output></td></tr>';
+    }).join("") + '</table><div class="bgn">위에 있는 것이 위에 그려집니다. 0% = 진하게, 숫자가 클수록 흐리게.</div></div></div>' +
     '<label>필지 색 <input type="color" data-x="color" value="' + E.color + '"></label><button class="rs" data-a="color0" title="기본색으로 되돌리기">기본색</button>' +
     '<label title="0% = 진하게 칠함, 100% = 테두리만">칠 투명도 <input type="range" data-x="ft" min="0" max="100" step="5" value="' + E.ft + '"> <output class="fto">' + E.ft + '%</output></label></div>' +
     '<div class="msg" role="status"></div><div class="tw"><table><thead><tr><th><label class="sw" title="지도에 번호 표시 켜기/끄기">#<input type="checkbox" data-x="showNo" checked><i></i></label></th><th><label class="sw" title="지도에 지번 표시 켜기/끄기">지번<input type="checkbox" data-x="showJibun" checked><i></i></label></th><th>지목</th><th class="n">면적(㎡)</th><th class="n">평</th><th>용도지역</th><th class="n" title="원/㎡">공시지가</th><th></th></tr></thead>' +
@@ -314,7 +327,7 @@
       p.feature.set("label", p.off ? "" : [E.showNo ? p.no + (E.showJibun ? "." : "") : "", E.showJibun ? p.jibun : ""].join(E.showNo && E.showJibun ? " " : ""));
       p.feature.set("pnu", p.pnu); p.feature.set("off", !!p.off); });
     src.changed();
-    var tb = $p("tbody"); tb.innerHTML = "";
+    var tb = $p(".tw tbody"); tb.innerHTML = "";   // 배경 드롭다운에도 표가 있어 목록 표를 콕 집는다
     var sum = 0, val = 0, noPrice = 0;
     E.list.forEach(function (p, i) {
       if (!p.off) { sum += +p.area || 0; if (p.area && p.price) val += p.area * p.price; else noPrice++; }
@@ -478,7 +491,7 @@
     // 제목: 첫 필지의 동 이름 + 지번(서울특별시 용산구 한강로2가 424번지 → 한강로2가 424)
     var first = (L0[0].address || "").replace(/\s+(산\s*)?\d[\d-]*\s*(번지)?\s*$/, "").trim().split(/\s+/).slice(-1)[0] || "";
     var title = (first ? first + " " : "") + L0[0].jibun + (L0.length > 1 ? " 외 " + (L0.length - 1) + "필지" : "");
-    var D = { parcels: parcels, color: E.color, bg: E.bg === "ksky" ? "sky" : E.bg === "jijuk" ? "jijuk" : "map", vkey: vworldKey(), ft: E.ft, tsv: tsv };
+    var D = { parcels: parcels, color: E.color, bg: bgOn("ksky") ? "sky" : bgOn("kmap") ? "map" : bgOn("jijuk") ? "jijuk" : "map", vkey: vworldKey(), ft: E.ft, tsv: tsv };
     var J = function (v) { return JSON.stringify(v).replace(/</g, "\\u003c"); };
     var html = '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' + esc(title) + " 위치도</title>" +
       '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">' +
@@ -629,9 +642,9 @@
       src.clear(); zsrc.clear(); hideZp(); E.list = []; E.sel = null; E.multi = []; E.pc = {}; E.ng = 0; $p("textarea").value = "";
       E.ft = 75; $p("[data-x=ft]").value = 75; $p(".fto").textContent = "75%"; zoneMode(false);
       E.pick = false; $p("[data-a=pick]").classList.remove("on"); document.body.classList.remove("emp-pick");
-      E.bg = "none"; E.op = 100; E.bt = 0; selBg.value = "none"; applyBg(); slider();
+      E.bgs = BG_DEF(); applyBg();
       E.showNo = true; E.showJibun = true; $p("[data-x=showNo]").checked = true; $p("[data-x=showJibun]").checked = true;
-      try { [KEY, KEY + "Bg", KEY + "Lbl", KEY + "PColor", KEY + "Off", KEY + "Ft"].forEach(function (k) { localStorage.removeItem(k); }); } catch (x) {}
+      try { [KEY, KEY + "Bg", KEY + "Bg2", KEY + "Lbl", KEY + "PColor", KEY + "Off", KEY + "Ft"].forEach(function (k) { localStorage.removeItem(k); }); } catch (x) {}
       if (/[#&]multi=/.test(location.hash)) history.replaceState(null, "", location.pathname + location.search);
       render(); msg("지번을 적고 '목록 추가'를 누르거나, '지도 클릭으로 고르기'를 켜세요.");
     }
@@ -652,6 +665,10 @@
     }
     if (a === "clear") { if (!confirm("고른 필지를 모두 지울까요?")) return; src.clear(); zsrc.clear(); hideZp(); E.list = []; E.sel = null; E.multi = []; E.ng = 0; saveOff(); render(); msg(""); }
     if (a === "zone") zoneMode(!E.zoneOn);
+    if (a === "bgdd") {
+      var bl = $p(".bgl"), br = e.target.getBoundingClientRect(); bl.hidden = !bl.hidden;
+      if (!bl.hidden) { bl.style.left = Math.max(4, Math.min(br.left, innerWidth - 376)) + "px"; var h = bl.offsetHeight; bl.style.top = (br.bottom + 4 + h > innerHeight ? Math.max(4, br.top - 4 - h) : br.bottom + 4) + "px"; }
+    }
     if (a === "mapopen") openMapWindow();
     if (a === "copy") {
       var head = ["번호", "소재지", "지목", "면적(㎡)", "면적(평)", "용도지역", "공시지가(원/㎡)", "공시지가 합계(백만원)", "기준연월", "PNU"], sum = 0, val = 0;
@@ -673,22 +690,27 @@
   });
 
   // ── 시작: 주소창 #multi= 또는 지난번 목록을 불러온다
-  // 배경 고르기·도면 진하기
-  var selBg = $p("[data-x=bg]"), rng = $p("[data-x=op]"), outOp = P.querySelector(".bgrow output");
-  // 막대 하나: 토지이음 도면만 = 도면 진하기(0~100), 카카오 = 배경 투명도(0~90)
-  function slider() {
-    var k = kakaoOn(), v = k ? E.bt : E.op;
-    $p("[data-x=opl]").textContent = k ? "배경 투명도" : "도면 진하기";
-    rng.max = k ? 90 : 100; rng.value = v; outOp.textContent = v + "%";
+  // 배경 드롭다운: 체크 = 켜기, 막대 = 그 배경의 투명도. 저장 KEY+"Bg2" = {on, t}
+  var saveBg = function () { try { localStorage.setItem(KEY + "Bg2", JSON.stringify(E.bgs)); } catch (e) {} };
+  function bgSum() {
+    var on = BGL.slice().reverse().filter(function (b) { return bgOn(b.k); }).map(function (b) { return b.name + (E.bgs.t[b.k] ? " " + E.bgs.t[b.k] + "%" : ""); });
+    var bt = $p("[data-a=bgdd]"); if (bt) bt.textContent = "배경: " + (on.length ? on.join(" + ") : "없음(흰 바탕)") + " ▾";
+    BGL.forEach(function (b) {
+      var c = $p('[data-bk="' + b.k + '"]'), r = $p('[data-bt="' + b.k + '"]'), o = $p('[data-bo="' + b.k + '"]');
+      if (c) c.checked = bgOn(b.k); if (r) { r.value = E.bgs.t[b.k]; r.disabled = !bgOn(b.k); } if (o) o.textContent = E.bgs.t[b.k] + "%";
+    });
   }
-  function setOp(v) { if (kakaoOn()) E.bt = +v; else E.op = +v; outOp.textContent = v + "%"; syncEum(); }
-  var saveBg = function () { try { localStorage.setItem(KEY + "Bg", JSON.stringify([E.bg, E.op, E.bt])); } catch (e) {} };
-  selBg.onchange = function () {
-    E.bg = selBg.value;
-    applyBg(); slider(); saveBg();
-    msg(E.bg.charAt(0) === "k" ? "카카오 배경을 쓰면 토지이음 '저장' 단추가 막힙니다(새로고침하면 풀림). 그림 파일이 필요하면 Win+Shift+S 로 캡처하세요." : "");
-  };
-  rng.oninput = function () { setOp(rng.value); };
+  P.querySelectorAll("[data-bk]").forEach(function (c) {
+    c.onchange = function () {
+      E.bgs.on[c.dataset.bk] = c.checked; applyBg(); saveBg();
+      msg(extOn() ? "카카오·지적도 배경을 쓰면 토지이음 '저장' 단추가 막힙니다(새로고침하면 풀림). 그림 파일이 필요하면 Win+Shift+S 로 캡처하세요." : "");
+    };
+  });
+  P.querySelectorAll("[data-bt]").forEach(function (r) {
+    r.oninput = function () { E.bgs.t[r.dataset.bt] = +r.value; syncEum(); bgSum(); };
+    r.onchange = saveBg;
+  });
+  document.addEventListener("mousedown", function (e) { var l = $p(".bgl"); if (l && !l.hidden && !e.target.closest(".bgdd")) l.hidden = true; });
   // 필지 색
   var colIn = $p("[data-x=color]");
   function setColor(c) {
@@ -714,8 +736,19 @@
       try { localStorage.setItem(KEY + "Lbl", JSON.stringify([E.showNo, E.showJibun])); } catch (e) {}
     };
   });
-  rng.onchange = saveBg;
-  (function () { try { var v = JSON.parse(localStorage.getItem(KEY + "Bg") || "null"); if (v && BG[v[0]]) { selBg.value = v[0]; E.bg = v[0]; E.op = +v[1] || 100; E.bt = +v[2] || 0; applyBg(); } } catch (e) {} slider(); })();
+  // 저장된 배경 되살리기. 예전 한 개 고르기(KEY+"Bg" = [bg, 도면 진하기, 배경 투명도])도 옮겨 온다
+  (function () {
+    try {
+      var v = JSON.parse(localStorage.getItem(KEY + "Bg2") || "null");
+      if (v && v.on && v.t) { E.bgs = BG_DEF(); E.bgs.on = v.on; Object.keys(v.t).forEach(function (k) { E.bgs.t[k] = +v.t[k] || 0; }); }
+      else {
+        var o = JSON.parse(localStorage.getItem(KEY + "Bg") || "null");
+        if (o) { E.bgs = BG_DEF(); if (o[0] === "kmap" || o[0] === "ksky") { E.bgs.on = {}; E.bgs.on[o[0]] = true; E.bgs.t[o[0]] = +o[2] || 0; }
+          else if (o[0] === "jijuk") E.bgs.on = { jijuk: true }; else E.bgs.t.eum = 100 - (+o[1] || 100); }
+      }
+    } catch (e) {}
+    applyBg();
+  })();
 
   var start = (/[#&]multi=([\d,]+)/.exec(location.hash) || [])[1];
   var keys = start ? start.split(",") : (function () { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { return []; } })();
