@@ -87,6 +87,7 @@
     '<div class="row"><button class="pri" data-a="run">수집 시작</button><button data-a="stop" disabled>멈춤</button>' +
     '<button data-a="copy" disabled>표 복사</button><button data-a="csv" disabled>엑셀(CSV) 저장</button>' +
     '<button data-a="map" disabled>지도 열기</button><button data-a="maps" disabled>지도 HTML 저장</button><button data-a="json" disabled>원본 JSON</button>' +
+    '<label class="oi" title="같은 지번이 여러 줄이면 가장 최근 거래만 포함(Y)으로 두고 앞 거래는 체크를 풉니다(표에는 그대로 남음)"><input type="checkbox" data-k="duplatest">중복은 최근 사례만 포함</label>' +
     '<label class="oi" title="밸류맵 지도에서 포함한 거래의 필지만 보이고 나머지 표시는 숨깁니다(대상지는 늘 보임)"><input type="checkbox" data-k="onlyinc">밸류맵 지도에 포함 거래만</label>' +
     '<label class="oi" title="밸류맵의 위 머리줄·왼쪽 검색판·오른쪽 매물 목록을 잠시 숨기고 지도를 화면 가득"><input type="checkbox" data-k="mapbig">밸류맵 지도 크게</label></div>' +
     '<div class="msg"></div><div class="sum" hidden></div><div class="tw" hidden></div>' +
@@ -161,6 +162,21 @@
     box.querySelectorAll('input:not([value="SAME"]):not(.allck)').forEach(function (c) { c.checked = on; });
   }, true);
   $('[data-k="onlyinc"]').onchange = function () { V.onlyInc = this.checked; save(); vmMapMark(); };
+  // 중복은 최근 사례만 포함(2026-10-24 사용자 요청): 같은 지번(pnu) 줄이 둘 이상이면 거래일이 가장 늦은 줄만 포함, 나머지는 포함 해제.
+  //   끄면 그 앞 거래들을 다시 포함으로 되돌린다(다른 까닭으로 뺀 줄은 건드리지 않게, 켤 때 뺀 줄만 기억)
+  function dupLatest(on) {
+    var g = {}; V.rows.forEach(function (r) { (g[r.pnu] = g[r.pnu] || []).push(r); });
+    Object.keys(g).forEach(function (k) {
+      var rs = g[k]; if (rs.length < 2) return;
+      var last = rs.reduce(function (a, b) { return b.date > a.date ? b : a; });
+      rs.forEach(function (r) {
+        if (r === last) return;
+        if (on && r.inc) { r.inc = false; r.dupOff = true; }
+        if (!on && r.dupOff) { r.inc = true; delete r.dupOff; }
+      });
+    });
+  }
+  $('[data-k="duplatest"]').onchange = function () { V.dupLatest = this.checked; dupLatest(V.dupLatest); save(); render(); };
   // 밸류맵 지도 크게(2026-10-22): 지도는 원래 화면 전체 폭이고 그 위에 판들이 '덮여' 있다(fixed·absolute). 지도(.naver-maps-marker 를 품은 칸)와
   //   이 창(#vmc)을 뺀 나머지 칸을 display:none 으로 감추고 resize 를 보내 지도가 다시 그려지게 한다. 끄면 되돌린다.
   //   줌아웃하면 매매 표시가 묶음 숫자로 바뀌는 것은 밸류맵 지도 동작이라 바꿀 수 없다.
@@ -635,7 +651,8 @@
   function renumber() { V.rows.forEach(function (r, i) { r.no = i + 1; }); }
   // 순서(정렬·끌기)와 포함 체크를 거래 고유 키로 저장한다(다시 열어도 그대로)
   function save() { try { localStorage.setItem(KEY, JSON.stringify({ data: V.data, order: V.rows.map(function (r) { return r.key; }),
-    incBy: V.rows.reduce(function (o, r) { o[r.key] = r.inc; return o; }, {}), sort: V.sort || null, onlyInc: !!V.onlyInc })); } catch (e) {} }
+    incBy: V.rows.reduce(function (o, r) { o[r.key] = r.inc; return o; }, {}), sort: V.sort || null, onlyInc: !!V.onlyInc, dupLatest: !!V.dupLatest,
+    dupOff: V.rows.filter(function (r) { return r.dupOff; }).map(function (r) { return r.key; }) })); } catch (e) {} }
   // ── 밸류맵 지도 위 표시(2026-10-22): 지도 표시는 div.naver-maps-marker[data-pnu] 라서 CSS 로 고른다(지도를 움직여도 그대로).
   //   포함한 거래의 필지 = 테라코타 테두리, '밸류맵 지도에 포함 거래만'을 켜면 나머지 필지 표시는 숨긴다(대상지는 늘 보임). 창을 닫으면 원래대로.
   function vmMapMark() {
@@ -797,7 +814,7 @@
       var cfg = { address: addr, cand: cand, years: years, types: types, zones: zones, region: region, radiusKm: radius || null, noAuction: $('[data-k="noauc"]').checked };
       V.stop = false; b.disabled = true; $('[data-a="stop"]').disabled = false;
       try {
-        V.data = await collect(cfg); V.rows = toRows(V.data); save(); render(); cfgFold(true);
+        V.data = await collect(cfg); V.rows = toRows(V.data); if (V.dupLatest) dupLatest(true); save(); render(); cfgFold(true);
         if (V.aucOut) setTimeout(function () { msg($(".msg").textContent + " (경매 낙찰 " + V.aucOut + "건은 '경매 제외'로 뺐습니다.)"); }, 0);
         msg(V.data.meta.saturatedLeaves ? "주의: 거래가 아주 촘촘한 곳이 있어 일부가 빠졌을 수 있습니다. 반경을 줄여 다시 해 보세요." : "다 모았습니다. 필지 " + V.data.meta.lotCount + "개, 거래 " + V.rows.length + "건.");
       } catch (err) { msg(err.message || String(err)); }
@@ -826,6 +843,8 @@
         V.rows.sort(function (a, b) { return (pos[a.key] == null ? 1e9 : pos[a.key]) - (pos[b.key] == null ? 1e9 : pos[b.key]); });
         V.rows.forEach(function (r) { if (last.incBy && r.key in last.incBy) r.inc = last.incBy[r.key]; });
         renumber(); V.sort = last.sort || null; V.onlyInc = !!last.onlyInc; $('[data-k="onlyinc"]').checked = V.onlyInc;
+        V.dupLatest = !!last.dupLatest; $('[data-k="duplatest"]').checked = V.dupLatest;
+        V.rows.forEach(function (r) { if ((last.dupOff || []).indexOf(r.key) >= 0) r.dupOff = true; });
       } else (last.inc || []).forEach(function (v, i) { if (V.rows[i]) V.rows[i].inc = v; });
       $(".addr").value = V.data.config.address; render(); V.candFor = null;
       findCands(V.data.config.address);
