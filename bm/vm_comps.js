@@ -50,7 +50,7 @@
     "#vmc .row button.pri{background:#D9653B;border-color:#D9653B;color:#fff;font-weight:700}#vmc .row button:disabled{opacity:.45;cursor:default}" +
     "#vmc .msg{min-height:16px;font-size:12px;color:#b45309;white-space:pre-line}#vmc .sum{font-size:12.5px;background:#FBEFE9;border:1px solid #EDB49C;border-radius:6px;padding:6px 8px}" +
     "#vmc table{border-collapse:collapse;width:100%;font-size:12px}#vmc th,#vmc td{border-bottom:1px solid #eaecf0;padding:4px 5px;text-align:left;white-space:nowrap}" +
-    "#vmc th{background:#f6f7f9;position:sticky;top:0}#vmc td.n,#vmc th.n{text-align:right}#vmc tr.subj td{background:#fff7d6}#vmc tr.out td{color:#98a2b3}#vmc tbody tr{cursor:pointer}#vmc tbody tr.hl td{background:#fff3b0}#vmc tbody tr:hover td{box-shadow:inset 0 -1px 0 #f0d78c}#vmc tfoot td{background:#f6f7f9;font-weight:700;position:sticky;bottom:0}#vmc tfoot tr:nth-child(1) td{bottom:44px;border-top:2px solid #d0d5dd}#vmc tfoot tr:nth-child(2) td{bottom:22px}" +
+    "#vmc th{background:#f6f7f9;position:sticky;top:0}#vmc td.n,#vmc th.n{text-align:right}#vmc tr.subj td{background:#fff7d6}#vmc tr.out td{color:#98a2b3}#vmc tbody tr{cursor:pointer}#vmc tbody tr.hl td{background:#fff3b0}#vmc tbody tr:hover td{box-shadow:inset 0 -1px 0 #f0d78c}#vmc tfoot td{background:#f6f7f9;font-weight:700}#vmc tfoot tr:nth-child(1) td{border-top:2px solid #d0d5dd}" +
     "#vmc td.note{white-space:normal;min-width:300px;font-size:11.5px;color:#b45309}#vmc a{color:#D9653B}#vmc .tw{overflow:auto;flex:1 1 auto;min-height:170px;max-height:none;border:1px solid #eaecf0;border-radius:6px}" +
     "#vmc.min .bd{display:none}#vmc .hint{font-size:11.5px;color:#667085}" +
     "#vmc .rz{position:absolute;left:-3px;top:-3px;width:16px;height:16px;cursor:nwse-resize;z-index:3}" +
@@ -425,7 +425,7 @@
       var hit = DETAIL2PT.find(function (x) { return x[0].test(pd.label || ""); });   // 글자 먼저('다가구' → 단독/다가구)
       return hit ? hit[1] : (CODE2PT[pd.code] || null);
     };
-    var rows = [], seenKey = {};
+    var rows = [];
     // 경매 낙찰 기록: 밸류맵은 실거래(TRADE)와 경매(AUCTION)를 따로 두지만, 거래내역에 낙찰가율·낙찰가·감정가가 붙은 기록이 섞여 오면 뺀다.
     //   t.rate 는 낙찰가율이 아니라 '직전 거래 대비 변동률'(±%)이다 — 쓰면 안 된다(2026-10-21 저장 결과 418건 중 140건에 있음, 경매 0건).
     var isAuction = function (t) {
@@ -456,30 +456,22 @@
         var y = +t.tradeDate.slice(0, 4);
         if (y < y1 || y > y2) return;
         if (c.noAuction !== false && isAuction(t)) { V.aucOut++; return; }   // 경매 제외(기본)
-        // 유형을 바꿔 되판 필지(2026-10-22 사용자 요청, 예 역삼동 683-7: 2021 다가구 → 2024 근린)
-        //   앞 거래의 유형을 고르지 않았으면 앞 거래 줄은 싣지 않고 뒤 거래 비고에 'YYYY년 다가구 xx억원 거래 후 용도변경하여 매각'
-        //   앞 거래 유형도 골랐으면 두 줄 다 싣고 둘 다 비고에 'YYYY년 다가구 xx억원 매입 후 용도변경하여 YYYY년 근린 xx억원 매각'
+        // 거래 당시 유형이 고른 유형이 아니면 줄에서 뺀다(2026-10-23 사용자 요청: 양재동 252-8 의 2026 근린 거래가 다가구 검색에 나왔음).
+        //   필지 유형(마커)이 아니라 거래 한 건의 유형을 먼저 본다. 유형을 바꿔 되판 필지(2021 다가구 → 2024 근린)는 남은 줄 비고에
+        //   'YYYY년 다가구 xx억원 매입 후 용도변경(신축)하여 YYYY년 근린 xx억원 매각', 앞 거래가 빠졌으면 'YYYY년 다가구 xx억원 거래 후 용도변경하여 매각'
+        if (!typeOk(t)) return;
         var next = convNext(lot, t);
-        if (next && +next.tradeDate.slice(0, 4) <= y2 && !typeOk(t)) return;
-        var key = lot.pnu + "|" + t.tradePrice, ms = Date.parse(t.tradeDate);
         var typ = t.propertyTypeDetail ? t.propertyTypeDetail.label : "", inc = true, notes = [];
-        var twin = (seenKey[key] || []).filter(function (x) { return Math.abs(x - ms) <= 548 * 864e5; });
-        if (twin.length) { inc = false; notes.push("같은 필지·같은 가격 거래가 1년 반 안에 또 있음 → 중복 신고 의심(맞으면 체크)"); }
-        (seenKey[key] = seenKey[key] || []).push(ms);
         if (newer) {
           var cat = catOf(t);
-          if (cat && c.ptList.indexOf(cat) < 0) { inc = false; notes.push("거래당시 유형 " + typ + "(" + typeLabel(cat) + ") → 고른 유형 아님"); }
-          else if (!cat && typ) notes.push("거래당시 유형 " + typ + " — 유형 확인");
+          if (!cat && typ) notes.push("거래당시 유형 " + typ + " — 유형 확인");
           if (okZones.length && lot.zoneLabel && okZones.indexOf(lot.zoneLabel) < 0) { inc = false; notes.push("현재 용도지역 " + lot.zoneLabel + " → 고른 용도지역 아님(확인 필요)"); }
         } else {
-          if (excl.indexOf(typ) >= 0) { inc = false; notes.push("거래당시 유형 " + typ + " → 대상 유형 아님"); }
           if (tz && lot.zoneLabel && lot.zoneLabel !== tz) { inc = false; notes.push("현재 용도지역 " + lot.zoneLabel + "(대상지 " + tz + ") — 확인 필요"); }
         }
         var prev = convPrev(lot, t);
         if (prev) notes.unshift(typeOk(prev) && +prev.tradeDate.slice(0, 4) >= y1 ? convFull(lot, prev, t) : convShort(lot, prev));
         if (next && +next.tradeDate.slice(0, 4) <= y2) notes.unshift(convFull(lot, t, next));
-        var ap = (lot.approvalDate || "").replace(/\./g, "-");
-        if (ap && ap > t.tradeDate) notes.push("거래 후 신축 → 사용승인일은 신축건물 기준");
         if (t.tradePrice % 1000000) notes.push("거래가 끝자리 비정형 → 지분·특수거래 확인");
         if ((t.buildingPricePerPyeong || 0) >= 1e8) notes.push("연면적단가 1억/평 이상 → 토지가치 위주 거래");
         if (nl > 1) notes.push(nl + "필지 일괄거래 — 단가 직접비교 유의");
@@ -496,6 +488,13 @@
     });
     rows.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
     rows.forEach(function (r, i) { r.no = i + 1; });
+    // 같은 지번이 여러 줄이면 그 줄마다 비고 맨 앞에 '중복 (2021.03.16, 2024.07.18)'(2026-10-23 사용자 요청)
+    var byPnu = {}; rows.forEach(function (r) { (byPnu[r.pnu] = byPnu[r.pnu] || []).push(r); });
+    Object.keys(byPnu).forEach(function (k) {
+      var g = byPnu[k]; if (g.length < 2) return;
+      var tag = "중복 (" + g.map(function (r) { return r.date.replace(/-/g, "."); }).join(", ") + ")";
+      g.forEach(function (r) { r.note = tag + (r.note ? "; " + r.note : ""); });
+    });
     return rows;
   }
   var unitLand = function (r) { return r.price && r.land ? r.price / (r.land * M2P) / 1e4 : null; };   // 만원/평
