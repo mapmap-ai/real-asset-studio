@@ -80,11 +80,12 @@
     '<div class="bd">' +
     '<div class="cfgbar" hidden><span class="cfgsum"></span><button type="button" data-a="cfg">조건 펴기 ▾</button></div><div class="cfg">' +
     '<div class="f"><input class="addr" type="text" placeholder="대상 주소 (예: 서울시 용산구 한강대로 100) · 지번도 됩니다">' +
-    '<label>기간 <input class="yr" type="number" data-k="y1" value="' + (thisYear - 5) + '">~<input class="yr" type="number" data-k="y2" value="' + thisYear + '"></label></div>' +
+  // 기간 기본 = 올해 포함 5년(2026 → 2022~2026, 2026-10-24 사용자 요청: 시작 2022)
+    '<label>기간 <input class="yr" type="number" data-k="y1" value="' + (thisYear - 4) + '">~<input class="yr" type="number" data-k="y2" value="' + thisYear + '"></label></div>' +
     '<div class="f" data-k="candrow" hidden><select class="cand" title="찾은 필지"></select></div>' +
     '<div class="f"><label><input type="radio" name="vmcsc" value="region" checked>같은 행정구역 <select class="rg" title="행정구역"><option value="">주소를 넣으면 고를 수 있습니다</option></select></label>' +
     '<label><input type="radio" name="vmcsc" value="radius">반경 <input class="km" type="number" step="0.5" min="0.5" value="1">km</label></div>' +
-    '<div class="f"><label>유형 ' + multi("pt", TYPES, 2) + '</label><label>지목 ' + multi("jm", JIMOK, 4, true) + '</label><label>용도지역 ' + multi("zn", ZONES, 4) + '</label>' +
+    '<div class="f"><label>유형 ' + multi("pt", TYPES, 2) + '</label><label>지목 ' + multi("jm", JIMOK, 4) + '</label><label>용도지역 ' + multi("zn", ZONES, 4) + '</label>' +
     '<label title="거래내역에 섞여 온 경매 낙찰(낙찰가율·감정가가 있는 기록)을 비교사례에서 뺍니다"><input type="checkbox" data-k="noauc" checked>경매 제외</label></div>' +
     '</div>' +
     '<div class="row"><button class="pri" data-a="run">수집 시작</button><button data-a="stop" disabled>멈춤</button>' +
