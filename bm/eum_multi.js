@@ -144,7 +144,7 @@
     "#emp .row button.pri{background:#D9653B;border-color:#D9653B;color:#fff}#emp .row button.pri2{border-color:#D9653B;color:#D9653B;font-weight:700}#emp .row button.on{background:#fee2e2;border-color:#e5383b;color:#b91c1c;font-weight:700}" +
     "#emp .msg{min-height:16px;font-size:12px;color:#b45309}#emp table{border-collapse:collapse;width:100%;font-size:12px;table-layout:auto!important}#emp th,#emp td{width:1%}#emp th:nth-child(2),#emp td:nth-child(2){width:auto}" +
     "#emp th,#emp td{border-bottom:1px solid #eaecf0;padding:4px 5px;text-align:left;white-space:nowrap}#emp th{background:#f6f7f9;position:sticky;top:0}" +
-    "#emp td.n,#emp th.n{text-align:right}#emp td.z{white-space:normal;min-width:86px;max-width:130px}#emp tbody tr{cursor:pointer}#emp tbody tr:hover td{background:#f3f6fb}#emp tr.sel td{background:#fff7d6}#emp tr.off td{color:#98a2b3}#emp tr.off .no{background:#d0d5dd}#emp input.inc{margin:0 4px 0 0;vertical-align:-2px;accent-color:#D9653B}" +
+    "#emp td.n,#emp th.n{text-align:right}#emp td.z{white-space:normal;min-width:86px;max-width:130px}#emp tbody tr{cursor:pointer;user-select:none}#emp tbody tr:hover td{background:#f3f6fb}#emp tr.sel td{background:#fff7d6}#emp tr.off td{color:#98a2b3}#emp tr.off .no{background:#d0d5dd}#emp input.inc{margin:0 4px 0 0;vertical-align:-2px;accent-color:#D9653B}" +
     "#emp .gr{display:inline-block;width:12px;margin-right:3px;color:#b0b7c3;cursor:grab;font-size:13px;user-select:none}#emp tr:hover .gr{color:#475467}" +
     "#emp tr.drag td{opacity:.35}#emp tr.drb td{box-shadow:inset 0 3px 0 var(--emp-c,#D9653B)}#emp tr.dra td{box-shadow:inset 0 -3px 0 var(--emp-c,#D9653B)}" +
     "#emp tfoot td{font-weight:700;background:#f6f7f9}#emp tfoot td.sumv{width:auto}#emp .no{display:inline-block;min-width:19px;height:19px;line-height:19px;border-radius:10px;background:var(--emp-c,#D9653B);color:#fff;text-align:center;font-size:11px;font-weight:700}" +
@@ -328,13 +328,25 @@
       tr.onclick = function (e) {   // 고른 행을 다시 누르면 노란 표시를 끈다(지도 이동 없음)
         if (e.target.className === "x") return remove(p.pnu);
         if (e.target.classList.contains("inc")) { p.off = !e.target.checked; saveOff(); render(); return; }
-        if (e.ctrlKey || e.metaKey) {   // Ctrl+클릭 = 여러 필지 고르기(다시 Ctrl+클릭하면 빠짐)
-          E.sel = null;   // 방금 추가해 노랗게 된 필지는 넣지 않는다 — Ctrl+클릭한 필지만
+        // Ctrl+클릭 = 한 필지씩 넣고 빼기, Shift+클릭 = 마지막으로 누른 줄부터 이 줄까지 한꺼번에(2026-10-24 사용자 요청: Ctrl·Shift 다중 선택)
+        if (e.shiftKey && E.anchor != null) {
+          var a0 = E.list.findIndex(function (x) { return x.pnu === E.anchor; }), b0 = i;
+          if (a0 < 0) a0 = i;
+          E.sel = null;
+          if (!(e.ctrlKey || e.metaKey)) E.multi = [];
+          E.list.slice(Math.min(a0, b0), Math.max(a0, b0) + 1).forEach(function (x) { if (E.multi.indexOf(x.pnu) < 0) E.multi.push(x.pnu); });
+          getSelection && getSelection().removeAllRanges();   // Shift+클릭으로 글자가 칠해지지 않게
+          render();
+          return msg(E.multi.length + "필지를 골랐습니다 — '필지 색'을 바꾸면 고른 필지만 바뀝니다(Esc = 고르기 풀기)");
+        }
+        if (e.ctrlKey || e.metaKey || e.shiftKey) {   // Ctrl+클릭(또는 기준 줄이 없을 때 Shift+클릭) = 여러 필지 고르기(다시 누르면 빠짐)
+          E.sel = null;   // 방금 추가해 노랗게 된 필지는 넣지 않는다 — 누른 필지만
           var k = E.multi.indexOf(p.pnu); if (k >= 0) E.multi.splice(k, 1); else E.multi.push(p.pnu);
+          E.anchor = p.pnu;
           render();
           return msg(E.multi.length ? E.multi.length + "필지를 골랐습니다 — '필지 색'을 바꾸면 고른 필지만 바뀝니다(Esc = 고르기 풀기)" : "");
         }
-        E.multi = [];
+        E.multi = []; E.anchor = p.pnu;
         if (E.sel === p.pnu) { E.sel = null; render(); return; }
         E.sel = p.pnu; render(); zoomTo([p.feature]);
       };
@@ -554,7 +566,8 @@
   function hideZp() { zp.hidden = true; }
   function zoneMode(on) {
     E.zoneOn = on; var b = $p("[data-a=zone]"); if (b) b.classList.toggle("on", on);
-    if (on) map.addInteraction(dbox); else map.removeInteraction(dbox);
+    if (on) map.addInteraction(dbox); else { map.removeInteraction(dbox); hideZp(); }
+    zlayer.setVisible(on);   // 끄면 점선 네모를 지도에서 감춘다(2026-10-24 사용자 요청) — 다시 켜면 그린 네모가 다시 보인다
     document.body.classList.toggle("emp-zone", on);
     msg(on ? "지도에 네모를 끌어 그리세요 — 그 안 필지의 수·면적·공시지가 합계가 뜹니다. 끝나면 [네모로 구역 묶기]를 다시 눌러 끄세요." : "");
   }
