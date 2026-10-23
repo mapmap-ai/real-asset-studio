@@ -211,26 +211,40 @@
 
   // ── 대상 주소 → 필지 후보 → 행정구역(시·도 / 시·군·구 / 법정동) 고르기. 도로명을 넣어도 밸류맵 주소검색이 지번(법정동)을 돌려준다
   V.cands = [];
+  // 같은 행정구역 고르기(2026-10-24 사용자 요청: 법정동만 있던 것에 읍·면, 시·군·구 단계를 나눠 넣기).
+  //   PNU 앞자리: 시·도 2 · 시·군·구 5 · 읍·면·동 8 · 리 10. 밸류맵 경계 API(depth 1~3)는 '리' 경계를 주지 않는다(빈 값) →
+  //   리는 그 읍·면 경계(앞 8자리 + 00)로 넓게 찾고 PNU 앞 10자리가 같은 필지만 남긴다. 읍·면·동은 앞 8자리로 거른다.
+  //   lv: ri(법정리) · emd(읍·면) · dong(법정동) · sgg(시·군·구) · sido(시·도)
   function regionsOf(c) {
     var t = (c.address || "").split(" "), sido = t[0] || "", i = 1, sgg = [];
     while (i < t.length - 1 && /(시|군|구)$/.test(t[i])) sgg.push(t[i++]);
-    var dong = t.slice(i, t.length - 1).filter(function (w) { return !/^산$/.test(w); }).join(" ");
-    var p = c.pnu, out = [];
-    if (dong) out.push({ code: p.slice(0, 10), depth: 3, name: dong, full: [sido].concat(sgg, [dong]).join(" ") });
-    if (sgg.length) out.push({ code: p.slice(0, 5), depth: 2, name: sgg.join(" "), full: [sido].concat(sgg).join(" ") });
-    if (sido) out.push({ code: p.slice(0, 2), depth: 1, name: sido, full: sido });
+    var rest = t.slice(i, t.length - 1).filter(function (w) { return !/^산$/.test(w); });
+    var p = c.pnu, out = [], hasRi = p.slice(8, 10) !== "00" && rest.length >= 2, base = [sido].concat(sgg);
+    if (hasRi) {
+      var emd = rest.slice(0, -1).join(" "), ri = rest[rest.length - 1];
+      out.push({ lv: "ri", code: p.slice(0, 10), poly: p.slice(0, 8) + "00", prefix: p.slice(0, 10), depth: 3, name: emd + " " + ri, tag: "법정리", full: base.concat([emd, ri]).join(" ") });
+      out.push({ lv: "emd", code: p.slice(0, 8) + "00", poly: p.slice(0, 8) + "00", prefix: p.slice(0, 8), depth: 3, name: emd, tag: /읍$/.test(emd) ? "법정읍" : /면$/.test(emd) ? "법정면" : "읍·면", full: base.concat([emd]).join(" ") });
+    } else if (rest.length) {
+      out.push({ lv: "dong", code: p.slice(0, 10), poly: p.slice(0, 10), prefix: p.slice(0, 10), depth: 3, name: rest.join(" "), tag: "법정동", full: base.concat(rest).join(" ") });
+    }
+    if (sgg.length) {
+      var last = sgg[sgg.length - 1];
+      out.push({ lv: "sgg", code: p.slice(0, 5), poly: p.slice(0, 5), prefix: p.slice(0, 5), depth: 2, name: sgg.join(" "), tag: /군$/.test(last) ? "군" : /구$/.test(last) ? "시·군·구" : "시·군·구", full: base.join(" ") });
+    }
+    if (sido) out.push({ lv: "sido", code: p.slice(0, 2), poly: p.slice(0, 2), prefix: p.slice(0, 2), depth: 1, name: sido, tag: "시·도 — 오래 걸림", full: sido });
     return out;
   }
   function fillRegions() {
     var c = V.cands[+$(".cand").value || 0], sel = $(".rg");
     if (!c) { sel.innerHTML = '<option value="">주소를 넣으면 고를 수 있습니다</option>'; return; }
-    var keep = sel.dataset.depth || "3";
+    var keep = sel.dataset.lv || "";
     sel.innerHTML = regionsOf(c).map(function (r) {
-      return '<option value="' + r.code + '" data-depth="' + r.depth + '" data-full="' + esc(r.full) + '">' + esc(r.name) + (r.depth === 3 ? " (법정동)" : r.depth === 2 ? " (시·군·구)" : " (시·도 — 오래 걸림)") + "</option>";
+      return '<option value="' + r.code + '" data-lv="' + r.lv + '" data-depth="' + r.depth + '" data-poly="' + r.poly + '" data-prefix="' + r.prefix + '" data-full="' + esc(r.full) + '">' + esc(r.name) + " (" + r.tag + ")</option>";
     }).join("");
-    var o = sel.querySelector('[data-depth="' + keep + '"]'); if (o) o.selected = true;
+    var o = keep && (sel.querySelector('[data-lv="' + keep + '"]') || (keep === "dong" ? sel.querySelector('[data-lv="ri"]') : keep === "ri" || keep === "emd" ? sel.querySelector('[data-lv="dong"]') : null));
+    if (o) o.selected = true;
   }
-  $(".rg").onchange = function () { var o = this.options[this.selectedIndex]; this.dataset.depth = o ? o.dataset.depth : "3"; P.querySelector('input[value="region"]').checked = true; };
+  $(".rg").onchange = function () { var o = this.options[this.selectedIndex]; this.dataset.lv = o ? o.dataset.lv : ""; P.querySelector('input[value="region"]').checked = true; };
   var candTimer = null, candSeq = 0;
   // 밸류맵 지도 옮기기(2026-10-24 사용자 요청): 밸류맵은 네이버 지도 인스턴스를 밖에 두지 않는다 → naver.maps.Map 의 메서드를 잠깐 감싸고
   //   resize 를 보내 지도가 스스로 부를 때 this 를 잡는다(가장 큰 지도). 잡으면 기억해 두고, 대상 필지 좌표로 morph(17단계 이상)
@@ -247,7 +261,14 @@
   }
   async function moveMapTo(c) {
     if (!c || !c.latitude || !c.longitude) return;
-    try { var m = await vmNaverMap(); if (m) m.morph(new naver.maps.LatLng(c.latitude, c.longitude), Math.max(m.getZoom(), 17)); } catch (e) {}
+    try {
+      var m = await vmNaverMap(); if (!m) return;
+      // 코드로 옮기면 밸류맵이 그 자리 거래 표시를 다시 부르지 않는다 → 다 옮긴 뒤 사람이 끈 것처럼 'dragend' 를 보낸다(2026-10-24 확인)
+      var kick = function () { try { naver.maps.Event.trigger(m, "dragend"); } catch (e) {} };
+      naver.maps.Event.once(m, "idle", function () { setTimeout(kick, 100); });
+      setTimeout(kick, 1500);
+      m.morph(new naver.maps.LatLng(c.latitude, c.longitude), Math.max(m.getZoom(), 17));
+    } catch (e) {}
   }
   async function findCands(q) {
     var my = ++candSeq;
@@ -432,6 +453,8 @@
     if (warn.length) msg(warn.join(" · "));
     var zoneCode = cfg.useDistricts;
     var region = cfg.region || { code: subjectPnu.slice(0, 10), depth: 3 };
+    if (!region.poly) region.poly = region.depth === 3 && region.code.slice(8, 10) !== "00" ? region.code.slice(0, 8) + "00" : region.code;   // 예전 결과·기본값: 리는 읍·면 경계로
+    if (!region.prefix) region.prefix = region.code;
     var districtCode = region.code;
     var dist = function (la, lo) {
       var r = Math.PI / 180, dLa = (la - lat0) * r, dLo = (lo - lng0) * r;
@@ -444,7 +467,7 @@
       bbox = [lng0 - dLng, lat0 - dLat, lng0 + dLng, lat0 + dLat];
     } else {
       // 경계: depth 1 = 시·도(2자리), 2 = 시·군·구(5자리), 3 = 법정동(10자리, PNU 앞부분)
-      var poly = await (await fetch("/api/properties/cadastrals/districts/polygons?depth=" + region.depth + "&districtCode=" + districtCode)).text();
+      var poly = await (await fetch("/api/properties/cadastrals/districts/polygons?depth=" + region.depth + "&districtCode=" + region.poly)).text();
       var pts = Array.from(poly.matchAll(/\[(1[23]\d\.\d+),\s*(3[3-8]\.\d+)\]/g)).map(function (m) { return [+m[1], +m[2]]; });
       if (!pts.length) throw new Error("행정구역 경계를 받지 못했습니다(" + districtCode + "). 반경으로 해 보세요.");
       var xs = pts.map(function (p) { return p[0]; }), ys = pts.map(function (p) { return p[1]; });
@@ -483,7 +506,7 @@
     var byPnu = {};
     Object.values(seen).forEach(function (m) {
       m.distKm = dist(m.latitude, m.longitude);
-      if (cfg.radiusKm ? m.distKm > cfg.radiusKm : !m.pnu.startsWith(districtCode)) return;
+      if (cfg.radiusKm ? m.distKm > cfg.radiusKm : !m.pnu.startsWith(region.prefix)) return;
       if (!byPnu[m.pnu] || byPnu[m.pnu].distKm > m.distKm) byPnu[m.pnu] = m;
     });
     var pnus = Object.keys(byPnu).filter(function (p) { return p !== subjectPnu; });
@@ -690,6 +713,8 @@
       var tr = e.target.closest("tr"); if (!tr) return;
       var on = !tr.classList.contains("hl"); tr.classList.toggle("hl", on);
       if (tr.dataset.i != null) V.rows[+tr.dataset.i].hl = on; else V.hlSubj = on;
+      vmMapMark();   // 고른 줄의 필지를 밸류맵 지도에서 주황으로 빛나게
+      if (on) { var rr = tr.dataset.i != null ? V.rows[+tr.dataset.i] : subjRow(V.data); if (rr && rr.lat) moveMapTo({ latitude: rr.lat, longitude: rr.lng }); }   // 그 필지로 지도를 옮겨 보이게
     });
     // 정렬: 값이 없는 행은 늘 아래로
     tw.querySelectorAll("button.so").forEach(function (b) {
@@ -751,6 +776,11 @@
     if (V.onlyInc && inc.length) css += "@keyframes vmcGlow{0%{box-shadow:0 0 0 3px rgba(255,214,10,.95),0 0 10px 4px rgba(255,214,10,.55)}50%{box-shadow:0 0 0 4px #ffd60a,0 0 26px 12px rgba(255,214,10,.95)}100%{box-shadow:0 0 0 3px rgba(255,214,10,.95),0 0 10px 4px rgba(255,214,10,.55)}}" +
       inc.map(function (pn) { return sel(pn, " > div"); }).join(",") + "{outline:3px solid #ffd60a!important;outline-offset:2px;border-radius:10px;animation:vmcGlow 1.1s ease-in-out infinite;filter:drop-shadow(0 0 6px rgba(255,214,10,.9))}";
     if (V.onlyInc) css += ".naver-maps-marker[data-pnu]{display:none!important}" + inc.concat([V.data.subject.pnu]).map(function (pn) { return sel(pn); }).join(",") + "{display:block!important}";
+    // 표에서 고른(노란 강조) 줄의 필지 = 주황 테두리 + 주황 후광 반짝임(2026-10-24 사용자 요청). '포함 거래만'으로 숨겨진 필지라도 보이게 한다
+    var hp = V.rows.filter(function (r) { return r.hl; }).map(function (r) { return r.pnu; }).concat(V.hlSubj ? [V.data.subject.pnu] : []).filter(function (x, i, a) { return a.indexOf(x) === i; });
+    if (hp.length) css += "@keyframes vmcGlowO{0%{box-shadow:0 0 0 3px rgba(255,122,0,.95),0 0 10px 4px rgba(255,122,0,.55)}50%{box-shadow:0 0 0 5px #ff7a00,0 0 30px 14px rgba(255,122,0,.95)}100%{box-shadow:0 0 0 3px rgba(255,122,0,.95),0 0 10px 4px rgba(255,122,0,.55)}}" +
+      hp.map(function (pn) { return sel(pn); }).join(",") + "{display:block!important;z-index:10000!important}" +
+      hp.map(function (pn) { return sel(pn, " > div"); }).join(",") + "{outline:3px solid #ff7a00!important;outline-offset:2px;border-radius:10px;animation:vmcGlowO .9s ease-in-out infinite!important;filter:drop-shadow(0 0 7px rgba(255,122,0,.95))!important}";
     el.textContent = css;
   }
 
@@ -900,7 +930,7 @@
       if (!cand) { msg("주소를 찾지 못했습니다: " + addr); return; }
       var radius = P.querySelector('input[name="vmcsc"]:checked').value === "radius" ? +$(".km").value : 0;
       var ro = $(".rg").options[$(".rg").selectedIndex];
-      var region = !radius && ro && ro.value ? { code: ro.value, depth: +ro.dataset.depth, full: ro.dataset.full } : null;
+      var region = !radius && ro && ro.value ? { code: ro.value, depth: +ro.dataset.depth, full: ro.dataset.full, poly: ro.dataset.poly, prefix: ro.dataset.prefix } : null;
       var cfg = { address: addr, cand: cand, years: years, types: types, zones: zones, jimoks: jimoks, region: region, radiusKm: radius || null, noAuction: $('[data-k="noauc"]').checked };
       V.stop = false; b.disabled = true; $('[data-a="stop"]').disabled = false;
       try {
