@@ -323,7 +323,7 @@
       if (p.off) tr.classList.add("off");
       tr.innerHTML = "<td><span class=gr title='끌어서 순서 바꾸기'>⠿</span><input type=checkbox class=inc title='포함 — 풀면 지도에 칠하지 않고 합계·표 복사·지도 열기에서 뺌'" + (p.off ? "" : " checked") + ">" +
         "<span class=no" + (E.pc[p.pnu] && !p.off ? " style='background:" + E.pc[p.pnu] + "'" : "") + ">" + (p.off ? "–" : p.no) + "</span></td><td title='" + esc(p.address) + (p.grp ? " · 구역 " + p.grp : "") + "'>" + esc(guDong(p)) + "</td><td>" + esc(p.jimok) +
-        "</td><td class=n>" + fmt(p.area) + "</td><td class=n>" + fmt(p.area * 0.3025, 1) + "</td><td class=z>" + esc(p.zone || "") +
+        "</td><td class=n>" + fmt(p.area) + "</td><td class=n>" + fmt(p.area * 0.3025) + "</td><td class=z>" + esc(p.zone || "") +
         "</td><td class=n title='" + esc(p.priceYm || "") + "'>" + fmt(p.price) + "</td><td class=xc><button class=x title='빼기'>×</button></td>";
       tr.onclick = function (e) {   // 고른 행을 다시 누르면 노란 표시를 끈다(지도 이동 없음)
         if (e.target.className === "x") return remove(p.pnu);
@@ -359,7 +359,7 @@
     });
     var nOff = E.list.length - no;
     $p(".cnt").textContent = no + "필지 합계" + (nOff ? " (뺀 " + nOff + ")" : "");
-    $p(".sum").textContent = fmt(sum); $p(".sump").textContent = fmt(sum * 0.3025, 1);
+    $p(".sum").textContent = fmt(sum); $p(".sump").textContent = fmt(sum * 0.3025);
     // 공시지가 합계 = Σ(면적㎡ × 공시지가 원/㎡), 백만원
     var sv = $p(".sumv");
     sv.textContent = no ? fmt(val / 1e6) + " 백만원" + (noPrice && noPrice < no ? "*" : "") : "";
@@ -460,8 +460,8 @@
     });
     var sum = 0, val = 0; L0.forEach(function (p) { sum += +p.area || 0; if (p.area && p.price) val += p.area * p.price; });
     var head = ["번호", "소재지", "지목", "면적(㎡)", "면적(평)", "용도지역", "공시지가(원/㎡)", "공시지가 합계(백만원)"];
-    var body = L0.map(function (p, i) { return [i + 1, p.address || p.jibun, p.jimok || "", fmt(p.area), fmt(p.area * 0.3025, 1), p.zone || "", fmt(p.price), p.area && p.price ? fmt(p.area * p.price / 1e6) : ""]; });
-    var foot = ["", L0.length + "필지 합계", "", fmt(sum), fmt(sum * 0.3025, 1), "", "", fmt(val / 1e6)];
+    var body = L0.map(function (p, i) { return [i + 1, p.address || p.jibun, p.jimok || "", fmt(p.area), fmt(p.area * 0.3025), p.zone || "", fmt(p.price), p.area && p.price ? fmt(p.area * p.price / 1e6) : ""]; });
+    var foot = ["", L0.length + "필지 합계", "", fmt(sum), fmt(sum * 0.3025), "", "", fmt(val / 1e6)];
     var tsv = [head].concat(body, [foot]).map(function (r) { return r.join("\t"); }).join("\n");
     // 제목: 첫 필지의 동 이름 + 지번(서울특별시 용산구 한강로2가 424번지 → 한강로2가 424)
     var first = (L0[0].address || "").replace(/\s+(산\s*)?\d[\d-]*\s*(번지)?\s*$/, "").trim().split(/\s+/).slice(-1)[0] || "";
@@ -485,7 +485,7 @@
       "table{border-collapse:collapse;width:100%;background:#fff;font-size:12.5px}th,td{border:1px solid #e4e7ec;padding:4px 7px;white-space:nowrap}th{background:#f2f4f7}td.n{text-align:right}" +
       "td.no span{display:inline-block;min-width:20px;height:20px;line-height:20px;border-radius:10px;color:#fff;text-align:center;font-size:11px;font-weight:700}tfoot td{font-weight:700;background:#f6f7f9}</style></head><body>" +
       '<header><h1 contenteditable="true" spellcheck="false" title="눌러서 고칠 수 있음">' + esc(title) + " 위치도</h1>" +
-      '<div class="kpi"><span>' + L0.length + "필지</span><span>면적 합계 <b>" + fmt(sum) + "㎡</b> (" + fmt(sum * 0.3025, 1) + "평)</span>" +
+      '<div class="kpi"><span>' + L0.length + "필지</span><span>면적 합계 <b>" + fmt(sum) + "㎡</b> (" + fmt(sum * 0.3025) + "평)</span>" +
       (val ? "<span>공시지가 합계 <b>" + fmt(val / 1e6) + " 백만원</b></span>" : "") + "<span>경계: 토지이음 · 배경: 카카오맵</span></div></header>" +
       '<div id="mapbox"><div id="map"></div>' +
       '<div class="zm"><button id="zin" title="확대(0.25단계)">+</button><button id="zout" title="축소(0.25단계)">−</button><button id="zfit" title="필지에 맞추기" style="font-size:13px">⊡</button><span id="zl"></span></div>' +
@@ -566,7 +566,7 @@
     var fresh = hits.filter(function (p) { return !p.grp; });
     var px = map.getPixelFromCoordinate(ol.extent.getTopRight(ext)), vr = map.getViewport().getBoundingClientRect();
     zp.style.left = Math.min(innerWidth - 270, Math.max(4, vr.left + px[0] + 10)) + "px"; zp.style.top = Math.min(innerHeight - 170, Math.max(4, vr.top + px[1])) + "px";
-    zp.innerHTML = "<b>네모 안 " + hits.length + "필지</b><div>면적 " + fmt(sum) + "㎡ (" + fmt(sum * 0.3025, 1) + "평)</div><div>공시지가 합계 " + fmt(val / 1e6) + " 백만원" + (noP ? " *" + noP + "필지 공시지가 없음" : "") + "</div>" +
+    zp.innerHTML = "<b>네모 안 " + hits.length + "필지</b><div>면적 " + fmt(sum) + "㎡ (" + fmt(sum * 0.3025) + "평)</div><div>공시지가 합계 " + fmt(val / 1e6) + " 백만원" + (noP ? " *" + noP + "필지 공시지가 없음" : "") + "</div>" +
       (fresh.length ? '<button data-z="num">이 구역 번호 매기기 (' + (E.list.filter(function (p) { return p.grp; }).length + 1) + "~" + (E.list.filter(function (p) { return p.grp; }).length + fresh.length) + "번)</button>" : "") +
       (hits.length > fresh.length ? '<div class="s">이미 다른 구역에 묶인 ' + (hits.length - fresh.length) + "필지는 번호를 그대로 둡니다</div>" : "") +
       '<button data-z="del">이 네모 지우기</button><button data-z="x">닫기</button>';
@@ -645,9 +645,9 @@
       var rows = IL().map(function (p, i) {
         var v = p.area && p.price ? p.area * p.price / 1e6 : "";
         sum += +p.area || 0; val += +v || 0;
-        return [i + 1, p.address || p.jibun, p.jimok, p.area, (p.area * 0.3025).toFixed(1), p.zone || "", p.price || "", v === "" ? "" : v.toFixed(1), p.priceYm || "", "'" + p.pnu];
+        return [i + 1, p.address || p.jibun, p.jimok, p.area, Math.round(p.area * 0.3025), p.zone || "", p.price || "", v === "" ? "" : v.toFixed(1), p.priceYm || "", "'" + p.pnu];
       });
-      rows.push(["", "합계", "", Math.round(sum * 100) / 100, (sum * 0.3025).toFixed(1), "", "", val.toFixed(1), "", ""]);
+      rows.push(["", "합계", "", Math.round(sum * 100) / 100, Math.round(sum * 0.3025), "", "", val.toFixed(1), "", ""]);
       var tsv = [head].concat(rows).map(function (r) { return r.join("\t"); }).join("\n");
       navigator.clipboard.writeText(tsv).then(function () { msg("표를 복사했습니다. 엑셀에 붙여 넣으세요."); }, function () { prompt("복사해서 쓰세요", tsv); });
     }
