@@ -142,12 +142,12 @@
     "#emp .bd{padding:8px 10px;display:flex;flex-direction:column;gap:6px;overflow:auto}#emp textarea{width:100%;height:58px;resize:vertical;border:1px solid #d0d5dd;border-radius:6px;padding:5px 7px;font-size:12.5px}" +
     "#emp .row{display:flex;gap:5px;flex-wrap:wrap}#emp .row button{padding:5px 9px;border:1px solid #d0d5dd;background:#fff;border-radius:6px;cursor:pointer;font-size:12.5px}" +
     "#emp .row button.pri{background:#D9653B;border-color:#D9653B;color:#fff}#emp .row button.pri2{border-color:#D9653B;color:#D9653B;font-weight:700}#emp .row button.on{background:#fee2e2;border-color:#e5383b;color:#b91c1c;font-weight:700}" +
-    "#emp .msg{min-height:16px;font-size:12px;color:#b45309}#emp table{border-collapse:collapse;width:100%;font-size:12px;table-layout:auto!important}#emp th,#emp td{width:auto}" +
+    "#emp .msg{min-height:16px;font-size:12px;color:#b45309}#emp table{border-collapse:collapse;width:100%;font-size:12px;table-layout:auto!important}#emp th,#emp td{width:1%}#emp th:nth-child(2),#emp td:nth-child(2){width:auto}" +
     "#emp th,#emp td{border-bottom:1px solid #eaecf0;padding:4px 5px;text-align:left;white-space:nowrap}#emp th{background:#f6f7f9;position:sticky;top:0}" +
     "#emp td.n,#emp th.n{text-align:right}#emp td.z{white-space:normal;min-width:86px;max-width:130px}#emp tbody tr{cursor:pointer}#emp tbody tr:hover td{background:#f3f6fb}#emp tr.sel td{background:#fff7d6}#emp tr.off td{color:#98a2b3}#emp tr.off .no{background:#d0d5dd}#emp input.inc{margin:0 4px 0 0;vertical-align:-2px;accent-color:#D9653B}" +
     "#emp .gr{display:inline-block;width:12px;margin-right:3px;color:#b0b7c3;cursor:grab;font-size:13px;user-select:none}#emp tr:hover .gr{color:#475467}" +
     "#emp tr.drag td{opacity:.35}#emp tr.drb td{box-shadow:inset 0 3px 0 var(--emp-c,#D9653B)}#emp tr.dra td{box-shadow:inset 0 -3px 0 var(--emp-c,#D9653B)}" +
-    "#emp tfoot td{font-weight:700;background:#f6f7f9}#emp .no{display:inline-block;min-width:19px;height:19px;line-height:19px;border-radius:10px;background:var(--emp-c,#D9653B);color:#fff;text-align:center;font-size:11px;font-weight:700}" +
+    "#emp tfoot td{font-weight:700;background:#f6f7f9}#emp tfoot td.sumv{width:auto}#emp .no{display:inline-block;min-width:19px;height:19px;line-height:19px;border-radius:10px;background:var(--emp-c,#D9653B);color:#fff;text-align:center;font-size:11px;font-weight:700}" +
     "#emp .sw{display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-weight:600}#emp .sw input{position:absolute;opacity:0;width:0;height:0}" +
     "#emp .sw i{position:relative;width:24px;height:14px;border-radius:7px;background:#d0d5dd;transition:background .15s}" +
     "#emp .sw i:after{content:'';position:absolute;left:2px;top:2px;width:10px;height:10px;border-radius:50%;background:#fff;transition:left .15s}" +
@@ -156,7 +156,7 @@
     "#emp .bgrow{align-items:center;gap:12px;font-size:12.5px}#emp .bgrow select{font-size:12.5px;padding:3px}#emp .bgrow input{vertical-align:middle;width:110px}#emp input[type=range]{accent-color:var(--emp-c,#D9653B)}" +
     "#emp .bgrow input[type=color]{width:30px;height:22px;padding:0 1px;border:1px solid #d0d5dd;border-radius:4px;cursor:pointer;background:#fff}#emp .bgrow .rs{border:none;background:none;color:#667085;font-size:11.5px;cursor:pointer;text-decoration:underline;padding:0}" +
     "#emp.min .bd{display:none}body.emp-zone #gisMapContainer canvas{cursor:crosshair!important}" +
-    "#empZone{position:fixed;z-index:2147483001;width:260px;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.25);padding:9px 11px;font:13px/1.55 'Noto Sans KR','Malgun Gothic',sans-serif;color:#1d2433}" +
+    ".emp-dbox{border:2px dashed #1d2433;background:rgba(217,101,59,.08)}#empZone{position:fixed;z-index:2147483001;width:260px;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.25);padding:9px 11px;font:13px/1.55 'Noto Sans KR','Malgun Gothic',sans-serif;color:#1d2433}" +
     "#empZone b{display:block;color:#A04626;font-size:14px}#empZone .s{color:#667085;font-size:11.5px}#empZone button{margin:6px 6px 0 0;font:inherit;font-size:12px;padding:3px 8px;border:1px solid #d0d5dd;border-radius:5px;background:#fff;cursor:pointer}" +
     "#empZone button[data-z=num]{border-color:#D9653B;background:#D9653B;color:#fff}#emp .row button.on[data-a=zone]{background:#1d2433;border-color:#1d2433;color:#fff}" +
     "#emp.min .bd{display:none}body.emp-pick #gisMapContainer,body.emp-pick canvas{cursor:crosshair!important}";
@@ -175,7 +175,7 @@
     '<label>필지 색 <input type="color" data-x="color" value="' + E.color + '"></label><button class="rs" data-a="color0" title="기본색으로 되돌리기">기본색</button>' +
     '<label title="0% = 진하게 칠함, 100% = 테두리만">칠 투명도 <input type="range" data-x="ft" min="0" max="100" step="5" value="' + E.ft + '"> <output class="fto">' + E.ft + '%</output></label></div>' +
     '<div class="msg" role="status"></div><div class="tw"><table><thead><tr><th><label class="sw" title="지도에 번호 표시 켜기/끄기">#<input type="checkbox" data-x="showNo" checked><i></i></label></th><th><label class="sw" title="지도에 지번 표시 켜기/끄기">지번<input type="checkbox" data-x="showJibun" checked><i></i></label></th><th>지목</th><th class="n">면적(㎡)</th><th class="n">평</th><th>용도지역</th><th class="n" title="원/㎡">공시지가</th><th></th></tr></thead>' +
-    '<tbody></tbody><tfoot><tr><td></td><td class="cnt"></td><td></td><td class="n sum"></td><td class="n sump"></td><td></td><td class="n sumv"></td><td></td></tr></tfoot></table></div></div>';
+    '<tbody></tbody><tfoot><tr><td></td><td class="cnt"></td><td></td><td class="n sum"></td><td class="n sump"></td><td></td><td class="n sumv" colspan="2"></td></tr></tfoot></table></div></div>';
   document.body.appendChild(P);
   P.style.setProperty("--emp-c", E.color);
   var $p = function (s) { return P.querySelector(s); };
@@ -548,7 +548,8 @@
   } });
   zlayer.set("name", "eumMultiZone"); map.addLayer(zlayer); zlayer.setZIndex(9998);
   setInterval(function () { if (map.getLayers().getArray().indexOf(zlayer) < 0) { map.addLayer(zlayer); zlayer.setZIndex(9998); } }, 1500);
-  var dbox = new ol.interaction.DragBox({ condition: function () { return true; } });
+  var dbox = new ol.interaction.DragBox({ condition: function () { return true; }, className: "ol-dragbox emp-dbox",
+    style: new ol.style.Style({ stroke: new ol.style.Stroke({ color: "#1d2433", width: 2, lineDash: [8, 6] }), fill: new ol.style.Fill({ color: "rgba(217,101,59,.08)" }) }) });
   var zp = document.createElement("div"); zp.id = "empZone"; zp.hidden = true; document.body.appendChild(zp);
   function hideZp() { zp.hidden = true; }
   function zoneMode(on) {
