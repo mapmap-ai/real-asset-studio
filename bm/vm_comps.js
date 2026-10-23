@@ -256,6 +256,17 @@
       var ad = await getJSON("/api/properties/addresses?keyword=" + encodeURIComponent(q));
       if (my !== candSeq) return;
       V.cands = ad.addresses || [];
+      // 못 찾으면(읍·면 이름 한 글자 오타 등, 2026-10-24 '진전읍' → 진접읍) 끝의 동·리 + 지번만으로 다시 찾고, 앞에 넣은 낱말(시·군·구 등)이
+      //   더 많이 들어맞는 후보만 남긴다. 고친 주소는 알림으로 알려 준다
+      var tk = q.split(/\s+/), fix = "";
+      if (!V.cands.length && tk.length > 2) {
+        var ad2 = await getJSON("/api/properties/addresses?keyword=" + encodeURIComponent(tk.slice(-2).join(" ")));
+        if (my !== candSeq) return;
+        var cs = ad2.addresses || [], front = tk.slice(0, -2).map(function (t) { return t.replace(/(특별시|광역시|특별자치시|특별자치도|도)$/, ""); }).filter(function (t) { return t.length >= 2; });
+        var sc = function (c) { return front.filter(function (t) { return c.address.indexOf(t) >= 0; }).length; };
+        var best = cs.reduce(function (m, c) { return Math.max(m, sc(c)); }, 0);
+        if (best > 0) { V.cands = cs.filter(function (c) { return sc(c) === best; }); fix = V.cands.length === 1 ? V.cands[0].address : ""; }
+      }
     } catch (e) { V.cands = []; }
     V.candFor = q;                              // 수집 시작 때 같은 주소면 다시 찾지 않는다(고른 후보 유지)
     var row = $('[data-k="candrow"]'), sel = $(".cand");
@@ -265,12 +276,18 @@
     }).join("");
     row.hidden = V.cands.length < 2;          // 하나뿐이면 바로 그 필지
     if (V.cands.length > 1) msg("필지 후보가 " + V.cands.length + "개입니다. 대상 필지를 고르세요.");
-    else msg("대상 필지: " + V.cands[0].address);
+    else msg((fix ? "'" + q + "' 그대로는 없어 비슷한 주소로 찾았습니다 — " : "대상 필지: ") + V.cands[0].address);
+    if (fix) { $(".addr").value = fix; V.candFor = fix; }
     fillRegions();
     moveMapTo(V.cands[0]);
   }
   $(".addr").addEventListener("input", function () { clearTimeout(candTimer); var v = this.value; candTimer = setTimeout(function () { findCands(v); }, 450); });
-  $(".cand").onchange = function () { fillRegions(); msg("대상 필지: " + V.cands[+this.value].address); moveMapTo(V.cands[+this.value]); };
+  $(".cand").onchange = function () {
+    var c = V.cands[+this.value];
+    // 고른 후보의 전체 주소를 주소 칸에도(2026-10-24 사용자 요청: '금곡리 364-1' → '경기도 남양주시 진전읍 금곡리 364-1'). 후보 목록·고른 것은 그대로 둔다
+    $(".addr").value = c.address; V.candFor = c.address;
+    fillRegions(); msg("대상 필지: " + c.address); moveMapTo(c);
+  };
 
   // 끌어서 옮기기
   (function () {
