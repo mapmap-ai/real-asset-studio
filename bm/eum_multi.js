@@ -187,7 +187,7 @@
     }).join("") + '</table><div class="bgn">위에 있는 것이 위에 그려집니다. 0% = 진하게, 숫자가 클수록 흐리게.</div></div></div>' +
     '<label>필지 색 <input type="color" data-x="color" value="' + E.color + '"></label><button class="rs" data-a="color0" title="기본색으로 되돌리기">기본색</button>' +
     '<label title="0% = 진하게 칠함, 100% = 테두리만">칠 투명도 <input type="range" data-x="ft" min="0" max="100" step="5" value="' + E.ft + '"> <output class="fto">' + E.ft + '%</output></label></div>' +
-    '<div class="msg" role="status"></div><div class="tw"><table><thead><tr><th><label class="sw" title="지도에 번호 표시 켜기/끄기">#<input type="checkbox" data-x="showNo" checked><i></i></label></th><th><label class="sw" title="지도에 지번 표시 켜기/끄기">지번<input type="checkbox" data-x="showJibun" checked><i></i></label></th><th>지목</th><th class="n">면적(㎡)</th><th class="n">평</th><th>용도지역</th><th class="n" title="원/㎡">공시지가</th><th></th></tr></thead>' +
+    '<div class="msg" role="status"></div><div class="tw"><table><thead><tr><th><label class="sw" title="지도에 번호 표시 켜기/끄기">#<input type="checkbox" data-x="showNo" checked><i></i></label></th><th><label class="sw" title="지도에 지번 표시 켜기/끄기">지번<input type="checkbox" data-x="showJibun" checked><i></i></label></th><th>지목</th><th class="n">면적(㎡)</th><th class="n">평</th><th>용도지역</th><th class="n" title="원/㎡">공시지가(㎡당)</th><th></th></tr></thead>' +
     '<tbody></tbody><tfoot><tr><td></td><td class="cnt"></td><td></td><td class="n sum"></td><td class="n sump"></td><td></td><td class="n sumv" colspan="2"></td></tr></tfoot></table></div></div>';
   document.body.appendChild(P);
   P.style.setProperty("--emp-c", E.color);
@@ -387,7 +387,7 @@
     $p(".sum").textContent = fmt(sum); $p(".sump").textContent = fmt(sum * 0.3025);
     // 공시지가 합계 = Σ(면적㎡ × 공시지가 원/㎡), 백만원
     var sv = $p(".sumv");
-    sv.textContent = no ? fmt(val / 1e6) + " 백만원" + (noPrice && noPrice < no ? "*" : "") : "";
+    sv.textContent = no ? "총 " + fmt(val / 1e6) + " 백만원" + (noPrice && noPrice < no ? "*" : "") : "";
     sv.title = "면적(㎡) × 공시지가(원/㎡) 합계" + (noPrice ? " · 공시지가나 면적이 없는 " + noPrice + "필지는 빠짐" : "");
     try { localStorage.setItem(KEY, JSON.stringify(E.list.map(function (p) { return p.pnu; }))); } catch (e) {}
   }
