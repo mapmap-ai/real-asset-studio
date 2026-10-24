@@ -35,8 +35,9 @@
   var JIMOK = ["대", "전", "답", "과수원", "목장용지", "임야", "광천지", "염전", "공장용지", "학교용지", "주차장", "주유소용지", "창고용지", "도로", "철도용지", "제방",
     "하천", "구거", "유지", "양어장", "수도용지", "공원", "체육용지", "유원지", "종교용지", "사적지", "묘지", "잡종지"].map(function (x) { return [x, x]; });
   // 유형별 세부 유형 = 거래 한 건의 propertyTypeDetail.label(밸류맵 거래 270건에서 확인한 값 + 건축물 용도에서 흔한 것). 값은 '유형:세부'(기타가 두 유형에 있음)
-  var SUBS = { BUILDING: ["근린", "업무", "판매", "숙박", "교육", "의료", "종교", "문화", "노유자", "위락", "운동", "자동차", "기타"], HOUSING: ["단독", "다가구"],
-    LAND: [], FACTORY: ["공장", "창고", "기타"], STORE: ["상가", "점포"], APT: ["아파트", "연립", "다세대", "오피스텔"] };
+  //   2026-10-24 사용자 요청: 상업업무는 근린·업무·판매·숙박·기타만, 상가는 세부 유형 없음(다섯을 다 고르면 교육·의료 등 드문 것도 그대로 들어온다)
+  var SUBS = { BUILDING: ["근린", "업무", "판매", "숙박", "기타"], HOUSING: ["단독", "다가구"],
+    LAND: [], FACTORY: ["공장", "창고", "기타"], STORE: [], APT: ["아파트", "연립", "다세대", "오피스텔"] };
   var zoneLabel = function (c) { var z = ZONES.find(function (x) { return x[0] === c; }); return z ? z[1] : c; };
   var typeLabel = function (c) { var t = TYPES.find(function (x) { return x[0] === c; }); return t ? t[1] : c; };
   var thisYear = new Date().getFullYear();
@@ -72,8 +73,9 @@
     "#vmc select.cand{flex:1;min-width:260px}#vmc select.rg{max-width:220px}#vmc .ms{position:relative}#vmc .ms summary{list-style:none;cursor:pointer;border:1px solid #d0d5dd;border-radius:6px;padding:4px 22px 4px 7px;font-size:12.5px;max-width:250px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#fff}" +
     "#vmc .ms summary::-webkit-details-marker{display:none}#vmc .ms summary:after{content:'▾';position:absolute;right:7px;top:4px;color:#667085}" +
     "#vmc .ms .opts{position:absolute;z-index:5;top:100%;left:0;margin-top:2px;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.15);padding:8px;display:grid;gap:3px 12px;width:max-content;max-width:420px}" +
-    "#vmc .ms .opts.ptg{display:block;min-width:260px}#vmc .ms .pg{padding:3px 0;border-bottom:1px dashed #eef0f3}#vmc .ms .pg > label{font-weight:600}" +
-    "#vmc .ms .subs{display:flex;flex-wrap:wrap;gap:2px 10px;padding:2px 0 2px 20px}#vmc .ms .subs label{font-size:11.5px!important;color:#475467;font-weight:400}" +
+    "#vmc .ms .opts.ptg{align-items:start}#vmc .ms .pg{display:flex;flex-direction:column}" +   // 예전 2칸 모양 그대로, 세부 유형은 그 아래 작게(2026-10-24)
+    "#vmc .ms .subs{display:flex;flex-wrap:wrap;gap:0 6px;padding:0 0 1px 17px;max-width:150px}#vmc .ms .subs label{font-size:10.5px!important;line-height:1.35;color:#667085;font-weight:400}" +
+    "#vmc .ms .subs input{width:11px;height:11px;margin:0 2px 0 0;vertical-align:-1px}" +
     "#vmc .ms .opts label{font-size:12.5px;white-space:nowrap}#vmc .ms .opts .same{grid-column:1/-1;display:flex;align-items:center;gap:10px;font-weight:700;border-bottom:1px solid #eaecf0;padding-bottom:4px;margin-bottom:2px}";
   document.head.appendChild(css);
 
@@ -717,7 +719,7 @@
   var unitBldg = function (r) { return r.price && r.bldg ? r.price / (r.bldg * M2P) / 1e4 : null; };
   function subjRow(d) {
     var s = d.subject, h = (s.histories || [])[0];
-    return { no: "대상", date: h ? h.tradeDate : "-", jibun: short(s.address), road: short(s.roadAddress), typ: h ? h.propertyTypeDetail.label : (s.propertyTypeLabel || ""),
+    return { no: "대상", date: h ? h.tradeDate : "-", jibun: short(s.address), road: short(s.roadAddress), typ: h && h.propertyTypeDetail ? h.propertyTypeDetail.label : "",
       zone: s.zoneLabel || "", price: h ? h.tradePrice : null, land: h ? h.landArea : (s.landM2 || null), bldg: h ? h.buildingTotalArea : (s.bldgM2 || null),
       ptNow: s.propertyTypeLabel || "", jimok: s.jimok || "", appr: s.approvalDate || "", note: h ? "대상지 가장 최근 거래 내역" : "대상지 거래 이력 없음", pnu: s.pnu, lat: s.lat, lng: s.lng, dist: 0,
       offx: h && offRatio(s, h.tradePrice, h.landArea, h.tradeDate) ? offRatio(s, h.tradePrice, h.landArea, h.tradeDate).x : null,
