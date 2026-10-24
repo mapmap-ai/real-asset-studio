@@ -86,6 +86,19 @@
   // ── 배경 겹치기(2026-10-24 사용자 요청): 네 가지를 함께 켤 수 있고 저마다 투명도(0% = 진하게). 아래 → 위 순서로 쌓는다.
   //   토지이음 도면 = 토지이음 자체 층(용도지역 색). 지적도(백지도) = 브이월드 연속지적도 WMS 를 흑백으로 — 다른 지도 위에 얹을 수 있게
   //   토지이음 자체 '연속지적도만 보기'(같은 층을 바꿔 그림) 대신 따로 받는다. 카카오·브이월드 조각은 CORS 머리글이 없어 켜면 토지이음 '저장'이 막힌다.
+  // 토지이음 도면 조각 주소: server/MapPlan?req=timg&timg=<판>/<tile1>/z/x_y.png — '연속지적도만 보기'를 켜면 tile1 → tile7(2026-10-24 확인).
+  //   토지이음 층의 조각 주소 함수를 빌려 tile 부분만 tile7 로 바꾼 층을 따로 만든다 → 토지이음 도면·카카오 위에 겹칠 수 있고, 지번이 토지이음과 같다(키 필요 없음)
+  var eumJijukLayer = function () {
+    var base = map.getLayers().getArray().filter(function (l) { return l instanceof ol.layer.Tile && l.getSource() && l.getSource().getTileUrlFunction; })[0];
+    if (!base) return null;
+    var es = base.getSource(), fn = es.getTileUrlFunction();
+    var l = new ol.layer.Tile({ source: new ol.source.TileImage({ projection: map.getView().getProjection(), tileGrid: es.getTileGrid(),
+      tileUrlFunction: function (c, r, pj) { var u = fn.call(es, c, r, pj); return u ? String(u).replace(/\/tile\d+\//, "/tile7/") : u; } }) });
+    l.on("precompose", function (e) { e.context.filter = "grayscale(1) brightness(1.18) contrast(1.35)"; });   // 지목 색 → 옅은 회색, 경계·지번은 진하게
+    l.on("postcompose", function (e) { e.context.filter = "none"; });
+    l.set("eumJijuk", true);
+    return l;
+  };
   var vworldLayer = function () {
     // OL 은 EPSG:5179 를 '북·동' 축으로 알아 WMS 1.3.0 BBOX 를 y,x 로 보낸다 → 브이월드는 x,y 로 읽어 엉뚱한 곳(빈 땅)을 준다(2026-10-24).
     //   조각을 부르기 직전에 BBOX 네 값을 x,y 순서로 바꿔 넣는다
@@ -106,7 +119,7 @@
     { k: "ksky", name: "카카오 위성", layers: [kakao("https://map.kakaocdn.net/map_skyview_hd/L{z}/{y}/{x}.jpg?v=160107"), kakao(MTS + "PNG_SKYH02/v24_kikr3/latest/{z}/{y}/{x}.png")] },
     { k: "kmap", name: "카카오 지도", layers: [kakao(MTS + "PNG02/v26_blse3/latest/{z}/{y}/{x}.png")] },
     { k: "eum", name: "토지이음 도면", layers: null },
-    { k: "jijuk", name: "지적도(백지도)", layers: [vworldLayer()] }
+    { k: "jijuk", name: "지적도(백지도)", layers: [eumJijukLayer() || vworldLayer()] }
   ];
   var BGK = {}; BGL.forEach(function (b) { BGK[b.k] = b; });
   var bgAll = [].concat(BGK.ksky.layers, BGK.kmap.layers, BGK.jijuk.layers);
@@ -137,7 +150,7 @@
   setInterval(syncEum, 1500);
   // 지적도를 켰는데 너무 축소했으면 알려 준다
   map.getView().on("change:resolution", function () {
-    if (!bgOn("jijuk")) return;
+    if (!bgOn("jijuk") || BGK.jijuk.layers[0].get("eumJijuk")) return;   // 토지이음 지적도는 어느 축척이든 나온다
     var far = map.getView().getResolution() > 4.01, m = $p && $p(".msg");
     if (far && m && !/더 확대/.test(m.textContent)) msg("지적도(백지도)는 지도를 조금 더 확대하면 보입니다(브이월드가 아주 작은 축척에서는 지적도를 주지 않음).");
   });   // 토지이음이 층을 다시 만들면 감추기·진하기를 다시 맞춘다
@@ -181,7 +194,7 @@
     "#emp.min .bd{display:none}body.emp-zone #gisMapContainer canvas{cursor:crosshair!important}" +
     ".emp-dbox{border:2px dashed #1d2433;background:rgba(217,101,59,.08)}#empZone{position:fixed;z-index:2147483001;width:260px;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.25);padding:9px 11px;font:13px/1.55 'Noto Sans KR','Malgun Gothic',sans-serif;color:#1d2433}" +
     "#empZone b{display:block;color:#A04626;font-size:14px}#empZone .s{color:#667085;font-size:11.5px}#empZone button{margin:6px 6px 0 0;font:inherit;font-size:12px;padding:3px 8px;border:1px solid #d0d5dd;border-radius:5px;background:#fff;cursor:pointer}" +
-    "#empZone button[data-z=num]{border-color:#D9653B;background:#D9653B;color:#fff}#emp .row button[data-a=zoneclr]{color:#A04626}#emp .row button.on[data-a=zone]{background:#1d2433;border-color:#1d2433;color:#fff}" +
+    "#empZone .zn span{display:block;margin-top:6px;font-size:12px;color:#475467}#empZone .zn input{width:48px;font:inherit;font-size:12px;padding:2px 4px;margin:0 3px;border:1px solid #d0d5dd;border-radius:4px}#empZone button[data-z=num]{border-color:#D9653B;background:#D9653B;color:#fff}#emp .row button[data-a=zoneclr]{color:#A04626}#emp .row button.on[data-a=zone]{background:#1d2433;border-color:#1d2433;color:#fff}" +
     "#emp.min .bd{display:none}body.emp-pick #gisMapContainer,body.emp-pick canvas{cursor:crosshair!important}";
   document.head.appendChild(css);
 
@@ -638,7 +651,7 @@
   function zonePnus(fz) { return E.list.filter(function (p) { return p.grp === fz.get("grp"); }).map(function (p) { return p.pnu; }); }
   function zoneDone(fz) {
     var geom = fz.getGeometry(), ext = geom.getExtent();
-    E.zc = (E.zc || 0) + 1; var nm = zName(E.zc); fz.set("label", nm); fz.set("zid", E.zc);
+    E.zc = (E.zc || 0) + 1; var nm = zName(E.zc); fz.set("zid", E.zc);   // 지도에는 구역 이름을 쓰지 않는다(2026-10-24 사용자 요청) — 합계 창에만
     var hits = IL().filter(function (p) { return geom.intersectsCoordinate(ol.extent.getCenter(p.feature.getGeometry().getExtent())); });
     zsrc.addFeature(fz);
     var sum = 0, val = 0, noP = 0; hits.forEach(function (p) { sum += +p.area || 0; if (p.area && p.price) val += p.area * p.price; else noP++; });
@@ -646,7 +659,8 @@
     var px = map.getPixelFromCoordinate(ol.extent.getTopRight(ext)), vr = map.getViewport().getBoundingClientRect();
     zp.style.left = Math.min(innerWidth - 270, Math.max(4, vr.left + px[0] + 10)) + "px"; zp.style.top = Math.min(innerHeight - 200, Math.max(4, vr.top + px[1])) + "px";
     zp.innerHTML = "<b>" + nm + " · " + hits.length + "필지</b><div>면적 " + fmt(sum) + "㎡ (" + fmt(sum * 0.3025) + "평)</div><div>공시지가 합계 " + fmt(val / 1e6) + " 백만원" + (noP ? " *" + noP + "필지 공시지가 없음" : "") + "</div>" +
-      (fresh.length ? '<button data-z="num">번호 매기기 (' + (done + 1) + "~" + (done + fresh.length) + "번)</button>" : "") +
+      (fresh.length ? '<div class="zn"><button data-z="num">번호 매기기 (' + (done + 1) + "~" + (done + fresh.length) + '번 추천)</button>' +
+        '<span>또는 <input type="number" class="z1" min="1" max="' + E.list.length + '" placeholder="' + (done + 1) + '">~<input type="number" class="z2" min="1" max="' + E.list.length + '" placeholder="' + (done + fresh.length) + '">번 <button data-z="numc">적용</button></span></div>' : "") +
       (hits.length ? '<button data-z="pick" title="이 구역 필지를 골라 둡니다 — 그다음 \'필지 색\'을 바꾸면 이 구역만 바뀝니다">이 구역 고르기(색 바꾸기)</button>' : "") +
       (hits.length > fresh.length ? '<div class="s">이미 다른 구역에 묶인 ' + (hits.length - fresh.length) + "필지는 번호를 그대로 둡니다</div>" : "") +
       '<button data-z="del">이 구역 지우기</button><button data-z="x">닫기</button>';
@@ -657,8 +671,14 @@
     };
     zp.onclick = function (e) {
       var z = e.target.getAttribute("data-z"); if (!z) return;
-      if (z === "num") {
+      if (z === "num" || z === "numc") {
         var at = E.list.filter(function (p) { return p.grp; }).length; E.ng++;
+        if (z === "numc") {   // 직접 적은 번호: 시작을 적으면 끝은 필지 수만큼, 끝만 적으면 거꾸로. 목록 안 자리로 넣는다
+          var a1 = +zp.querySelector(".z1").value, a2 = +zp.querySelector(".z2").value;
+          if (!a1 && a2) a1 = a2 - fresh.length + 1;
+          if (!a1) { msg("시작 번호를 적어 주세요."); return; }
+          at = Math.max(0, Math.min(a1 - 1, E.list.length - fresh.length));
+        }
         fresh.forEach(function (p) { p.grp = fz.get("zid"); });
         fz.set("grp", fz.get("zid"));
         E.list = E.list.filter(function (p) { return fresh.indexOf(p) < 0; });
