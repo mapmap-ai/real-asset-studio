@@ -440,6 +440,37 @@
     var z = ZONES.find(function (x) { return x[1] === t || x[1] === n || x[1] === n.replace(/\s/g, ""); });
     return z ? z[0] : null;
   }
+  // ── 밸류맵 땅 정보 화면 /properties/lands/{pnu}(2026-10-24 확인): 거래가 없어도 건축물대장(buildings: 주용도·연면적·사용승인일)과
+  //   총 대지면적이 들어 있다 → 현재 유형(세부: 근린·업무·다가구…)과 거래 없는 대상지의 면적·사용승인일을 여기서. 거래 화면(trades)은 그대로 쓴다
+  //   (땅 화면에는 거래 유형 코드 등이 없음). 브이월드 건축물 정보는 빠진 건물이 있어(한강대로 100 아모레퍼시픽) 예비로만
+  function purposeShort(b) {
+    var pu = b.purpose || {}, a = pu.label || "", d = pu.labelDetail || "", e = b.purposeEtcName || "", all = a + " " + d + " " + e;
+    if (/다가구/.test(all)) return "다가구";
+    if (/단독주택/.test(a)) return "단독";
+    if (/공동주택/.test(a)) return /아파트/.test(all) ? "아파트" : /연립/.test(all) ? "연립" : /다세대/.test(all) ? "다세대" : "공동주택";
+    if (/오피스텔/.test(all)) return "오피스텔";
+    if (/근린생활|근생/.test(a)) return "근린";   // '제2종근생'처럼 줄여 오기도 한다
+    if (/업무/.test(a)) return "업무";
+    if (/판매/.test(a)) return "판매";
+    if (/숙박/.test(a)) return "숙박";
+    if (/공장/.test(a)) return "공장";
+    if (/창고/.test(a)) return "창고";
+    return a.replace(/시설$/, "") || "기타";
+  }
+  async function landsInfo(pnu) {
+    try {
+      var r = await fetch("/properties/lands/" + pnu); if (!r.ok) return null;
+      var t = (await r.text()).replace(/\\"/g, '"'), bs = [], sm = [];
+      var mb = t.match(/"buildings":(\[.*?\]),"talk"/); if (mb) try { bs = JSON.parse(mb[1]) || []; } catch (e) {}
+      // 총 대지면적: 땅 화면은 content 가 title 앞에 온다({"content":{"pyeong":…,"squareMeter":"14,153.1m²"},"title":"총 대지면적"})
+      var la = t.match(/"squareMeter":"([\d,.]+)m²"\},"title":"총 대지면적"/) || t.match(/"title":"총 대지면적","content":\{"pyeong":"[^"]*","squareMeter":"([\d,.]+)m²"/);
+      var land = la ? +la[1].replace(/,/g, "") || null : null;
+      var main = bs.filter(function (b) { return b.attachedType && b.attachedType.code === "C0"; }); if (!main.length) main = bs;
+      var m0 = main.slice().sort(function (a, b) { return (b.buildingTotalArea || 0) - (a.buildingTotalArea || 0); })[0];
+      return { land: land, bldg: bs.reduce(function (a, b) { return a + (+b.buildingTotalArea || 0); }, 0) || null,
+        appr: m0 && m0.usingApprovalDate ? m0.usingApprovalDate.replace(/-/g, ".") : null, ptNow: m0 ? purposeShort(m0) : (bs.length ? "" : "토지"), name: m0 ? m0.buildingName || "" : "" };
+    } catch (e) { return null; }
+  }
   async function parseDetail(pnu) {
     var h = null;
     for (var i = 0; i < 3 && !h; i++) {
@@ -509,7 +540,8 @@
     }
     var lat0 = S.latitude, lng0 = S.longitude, subjectPnu = S.pnu;
     msg("대상지 확인 중… " + S.address);
-    var subject = await parseDetail(subjectPnu);
+    var subject = await parseDetail(subjectPnu), sli = await landsInfo(subjectPnu);
+    if (sli) subject.ptNow = sli.ptNow;
     if (!subject.address) subject.address = S.address; if (!subject.roadAddress) subject.roadAddress = S.roadAddress || "";
     if (!subject.zoneCode || !subject.jimok || !CODE2PT[subject.propertyTypeCode]) {   // 밸류맵 상세에 없으면 브이월드 토지특성으로 채운다
       var vl = await vwLand(subjectPnu);
@@ -522,7 +554,8 @@
       }
     }
     if (!(subject.histories || []).length) {   // 거래 이력이 없는 대상지: 토지면 대지면적만, 건물이 있으면 대지·연면적·사용승인일
-      var vl2 = vl || await vwLand(subjectPnu), vb = await vwBuild(subjectPnu);
+      if (sli) { if (!subject.landM2 && sli.land) subject.landM2 = sli.land; if (!subject.bldgM2 && sli.bldg) subject.bldgM2 = sli.bldg; if (!subject.approvalDate && sli.appr) subject.approvalDate = sli.appr; }
+      var vl2 = vl || await vwLand(subjectPnu), vb = (!subject.bldgM2 || !subject.approvalDate) && sli && sli.ptNow !== "토지" ? await vwBuild(subjectPnu) : null;
       if (!subject.landM2 && vl2 && vl2.area) subject.landM2 = vl2.area;
       if (vb) { if (!subject.bldgM2 && vb.bldg) subject.bldgM2 = vb.bldg; if (!subject.approvalDate && vb.appr) subject.approvalDate = vb.appr; }
     }
@@ -614,7 +647,10 @@
     for (var s = 0; s < pnus.length; s += 4) {
       if (V.stop) throw new Error("멈췄습니다.");
       msg("거래내역 읽는 중… " + Math.min(s + 4, pnus.length) + " / " + pnus.length + " 필지");
-      var part = await Promise.all(pnus.slice(s, s + 4).map(async function (pn) { var l = await parseDetail(pn); l.official = await officialPrices(pn); return l; }));
+      var part = await Promise.all(pnus.slice(s, s + 4).map(async function (pn) {
+        var two = await Promise.all([parseDetail(pn), landsInfo(pn)]), l = two[0];
+        if (two[1]) l.ptNow = two[1].ptNow;   // 현재 유형(건축물대장 주용도 세부)
+        l.official = await officialPrices(pn); return l; }));
       part.forEach(function (l) { var m = byPnu[l.pnu]; Object.assign(l, { lat: m.latitude, lng: m.longitude, distKm: m.distKm }); lots.push(l); });
       await sleep(150);
     }
@@ -699,7 +735,7 @@
         var ofr = offRatio(lot, t.tradePrice, t.landArea, t.tradeDate);
         rows.push({ key: key, offx: ofr ? ofr.x : null, offNow: ofr ? ofr.now : false, offYm: ofr && ofr.now ? lot.officialNowYm : "",
           date: t.tradeDate, jibun: short(lot.address) + (nl > 1 ? " 외 " + (nl - 1) + "필지" : ""), road: short(lot.roadAddress),
-          typ: typ, ptNow: lot.propertyTypeLabel || "", jimok: lot.jimok || "", zone: lot.zoneLabel || "", price: t.tradePrice, land: t.landArea, bldg: t.buildingTotalArea,
+          typ: typ, ptNow: lot.ptNow != null ? lot.ptNow : (lot.propertyTypeLabel || ""), jimok: lot.jimok || "", zone: lot.zoneLabel || "", price: t.tradePrice, land: t.landArea, bldg: t.buildingTotalArea,
           appr: lot.approvalDate || "", inc: inc, note: notes.join("; "), pnu: lot.pnu, lat: lot.lat, lng: lot.lng,
           dist: lot.distKm });
       });
@@ -721,7 +757,7 @@
     var s = d.subject, h = (s.histories || [])[0];
     return { no: "대상", date: h ? h.tradeDate : "-", jibun: short(s.address), road: short(s.roadAddress), typ: h && h.propertyTypeDetail ? h.propertyTypeDetail.label : "",
       zone: s.zoneLabel || "", price: h ? h.tradePrice : null, land: h ? h.landArea : (s.landM2 || null), bldg: h ? h.buildingTotalArea : (s.bldgM2 || null),
-      ptNow: s.propertyTypeLabel || "", jimok: s.jimok || "", appr: s.approvalDate || "", note: h ? "대상지 가장 최근 거래 내역" : "대상지 거래 이력 없음", pnu: s.pnu, lat: s.lat, lng: s.lng, dist: 0,
+      ptNow: s.ptNow != null ? s.ptNow : (s.propertyTypeLabel || ""), jimok: s.jimok || "", appr: s.approvalDate || "", note: h ? "대상지 가장 최근 거래 내역" : "대상지 거래 이력 없음", pnu: s.pnu, lat: s.lat, lng: s.lng, dist: 0,
       offx: h && offRatio(s, h.tradePrice, h.landArea, h.tradeDate) ? offRatio(s, h.tradePrice, h.landArea, h.tradeDate).x : null,
       offNow: h && offRatio(s, h.tradePrice, h.landArea, h.tradeDate) ? offRatio(s, h.tradePrice, h.landArea, h.tradeDate).now : false, offYm: s.officialNowYm || "" };
   }
