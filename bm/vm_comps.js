@@ -73,7 +73,8 @@
     "#vmc select.cand{flex:1;min-width:260px}#vmc select.rg{max-width:220px}#vmc .ms{position:relative}#vmc .ms summary{list-style:none;cursor:pointer;border:1px solid #d0d5dd;border-radius:6px;padding:4px 22px 4px 7px;font-size:12.5px;max-width:250px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#fff}" +
     "#vmc .ms summary::-webkit-details-marker{display:none}#vmc .ms summary:after{content:'▾';position:absolute;right:7px;top:4px;color:#667085}" +
     "#vmc .ms .opts{position:absolute;z-index:5;top:100%;left:0;margin-top:2px;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.15);padding:8px;display:grid;gap:3px 12px;width:max-content;max-width:420px}" +
-    "#vmc .rgm{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px}#vmc .rgq{width:150px}#vmc .rgchips{display:inline-flex;flex-wrap:wrap;gap:4px}" +
+    "#vmc .f.scope{flex-wrap:nowrap;gap:6px}#vmc .f.scope > label{white-space:nowrap;flex:none}#vmc .f.scope .rg{width:132px;max-width:132px}#vmc .f.scope .km{width:44px}" +   // 한 줄에(2026-10-24): 행정구역 칸 10글자쯤, 반경 숫자 칸 좁게, 여러 행정구역 칸이 가장 넓게
+    "#vmc .rgm{display:flex;flex:1 1 auto;min-width:0;flex-wrap:wrap;align-items:center;gap:4px}#vmc .rgq{flex:1 1 120px;min-width:90px;width:auto}#vmc .rgchips:empty{display:none}#vmc .rgchips{flex-basis:100%}#vmc .rgchips{display:inline-flex;flex-wrap:wrap;gap:4px}" +
     "#vmc .rgchip{background:#FBEFE9;border:1px solid #EDB49C;color:#A04626;border-radius:12px;padding:1px 4px 1px 8px;font-size:12px;white-space:nowrap}#vmc .rgchip button{border:0;background:none;color:#A04626;cursor:pointer;padding:0 3px;font-size:13px}" +
     "#vmc .ms .opts.ptg{align-items:start}#vmc .ms .pg{display:flex;flex-direction:column}" +   // 예전 2칸 모양 그대로, 세부 유형은 그 아래 작게(2026-10-24)
     "#vmc .ms .subs{display:flex;flex-wrap:wrap;gap:0 6px;padding:0 0 1px 17px;max-width:150px}#vmc .ms .subs label{font-size:10.5px!important;line-height:1.35;color:#667085;font-weight:400}" +
@@ -92,7 +93,7 @@
   // 기간 기본 = 올해 포함 5년(2026 → 2022~2026, 2026-10-24 사용자 요청: 시작 2022)
     '<label>기간 <input class="yr" type="number" data-k="y1" value="' + (thisYear - 4) + '">~<input class="yr" type="number" data-k="y2" value="' + thisYear + '"></label></div>' +
     '<div class="f" data-k="candrow" hidden><select class="cand" title="찾은 필지"></select></div>' +
-    '<div class="f"><label><input type="radio" name="vmcsc" value="region" checked>같은 행정구역 <select class="rg" title="행정구역"><option value="">주소를 넣으면 고를 수 있습니다</option></select></label>' +
+    '<div class="f scope"><label><input type="radio" name="vmcsc" value="region" checked>같은 행정구역 <select class="rg" title="행정구역"><option value="">주소를 넣으면 고를 수 있습니다</option></select></label>' +
     '<label><input type="radio" name="vmcsc" value="radius">반경 <input class="km" type="number" step="0.5" min="0.5" value="1">km</label>' +
     '<label title="행정구역 이름(구·군·동·읍·면·리)을 넣고 [추가] — 여러 개를 한꺼번에 찾습니다(예: 종로구, 중구)"><input type="radio" name="vmcsc" value="multi">여러 행정구역</label>' +
     '<span class="rgm"><input class="rgq" type="text" placeholder="예: 종로구 · 서울 중구 · 역삼동"><select class="rgpick" hidden></select><button type="button" data-a="rgadd">추가</button><span class="rgchips"></span></span></div>' +
@@ -351,11 +352,14 @@
     var my = ++subjSeq; V.subjInfo = null; markSame();
     if (!c) return;
     try {
-      var d = await parseDetail(c.pnu); if (my !== subjSeq) return;
+      var two = await Promise.all([parseDetail(c.pnu), landsInfo(c.pnu)]), d = two[0], li = two[1]; if (my !== subjSeq) return;
       var useT = null;
       if (!d.zoneCode || !d.jimok || !CODE2PT[d.propertyTypeCode]) { var vl = await vwLand(c.pnu); if (my !== subjSeq) return; if (vl) { if (!d.zoneCode) d.zoneCode = zoneByName(vl.zone); if (!d.jimok) d.jimok = vl.jimok; useT = typeByUse(vl.use); } }
       var h = (d.histories || [])[0];
-      V.subjInfo = { pt: CODE2PT[d.propertyTypeCode] || useT, dt: h && h.propertyTypeDetail ? h.propertyTypeDetail.label : null, jm: d.jimok || null, zn: d.zoneCode || null };
+      // 대상지 세부 유형 = 지금 건물의 주용도(땅 정보 — 한강대로 100 → 업무), 없으면 가장 최근 거래의 유형. 유형을 모르면 세부 유형으로 짐작
+      var dt0 = li && li.ptNow && li.ptNow !== "토지" ? li.ptNow : (h && h.propertyTypeDetail ? h.propertyTypeDetail.label : null);
+      var pt0 = CODE2PT[d.propertyTypeCode] || (dt0 ? Object.keys(SUBS).find(function (t) { return SUBS[t].indexOf(dt0) >= 0; }) : null) || useT;
+      V.subjInfo = { pt: pt0, dt: dt0, jm: d.jimok || null, zn: d.zoneCode || null };
       markSame();
     } catch (e) {}
   }
@@ -369,12 +373,25 @@
       if (same.checked && I[k]) {
         var o = box.querySelector('input:not(.dt)[value="' + I[k] + '"]');
         if (o && !o.checked) { o.checked = true; o.setAttribute("data-auto", "1"); }
-        if (k === "pt" && o) o.closest(".pg").querySelectorAll("input.dt").forEach(function (d) { if (!d.checked) { d.checked = true; d.setAttribute("data-auto", "1"); } });
+        // 유형: 대상지 세부 유형 칸만 체크(2026-10-24 사용자 요청: 한강대로 100 → 상업업무-업무). 그 세부 유형이 목록에 없으면 그 유형 전부
+        if (k === "pt" && o) {
+          var ds = o.closest(".pg").querySelectorAll("input.dt"), one = I.dt && o.closest(".pg").querySelector('input.dt[value="' + I[k] + ":" + I.dt + '"]');
+          Array.prototype.forEach.call(ds, function (d) { if (!d.checked && (!one || d === one)) { d.checked = true; d.setAttribute("data-auto", "1"); } });
+        }
       }
       msLabel(k);
     });
   }
   P.addEventListener("change", function (e) { if (e.target.value === "SAME" && e.target.closest(".ms")) markSame(); });
+  // 대상지 값 칸을 직접 풀면 '대상지와 같게'도 푼다(2026-10-24 사용자 요청) — 다른 칸의 체크는 그대로 두고(저절로 체크 표시만 지움)
+  P.addEventListener("change", function (e) {
+    var t = e.target, box = t.closest && t.closest(".ms"); if (!box || t.checked || t.value === "SAME" || t.classList.contains("allck")) return;
+    var k = box.dataset.k, I = V.subjInfo || {}, same = box.querySelector('input[value="SAME"]');
+    var mine = k === "pt" ? (t.classList.contains("dt") ? t.value === I.pt + ":" + I.dt : t.value === I.pt) : t.value === I[k];
+    if (!mine || !same.checked) return;
+    same.checked = false; box.querySelectorAll("input[data-auto]").forEach(function (x) { x.removeAttribute("data-auto"); });
+    msLabel(k);
+  });
   async function findCands(q) {
     var my = ++candSeq;
     q = q.trim(); if (q.length < 3) return;
@@ -876,7 +893,9 @@
     var rows = V.rows, st = stats(rows), sr = subjRow(d), su = unitLand(sr);
     var sum = $(".sum"); sum.hidden = false;
     // 괄호 = (용도지역, 밸류맵 부동산 유형). 거래가 없는 필지(도로 등)는 유형이 없어 용도지역만, 둘 다 없으면 괄호를 뺀다(2026-10-24)
-    var sp = [sr.zone, d.subject.propertyTypeLabel].filter(Boolean);
+    // 유형은 세부 유형까지: '상업업무(업무)'(2026-10-24 사용자 요청). 세부 = 지금 건물 주용도(땅 정보), 없으면 가장 최근 거래 유형
+    var sdt = d.subject.ptNow && d.subject.ptNow !== "토지" ? d.subject.ptNow : (sr.typ || "");
+    var sp = [sr.zone, d.subject.propertyTypeLabel ? d.subject.propertyTypeLabel + (sdt && sdt !== d.subject.propertyTypeLabel ? "(" + sdt + ")" : "") : ""].filter(Boolean);
     sum.innerHTML = "<b>" + esc(sr.jibun) + "</b>" + (sp.length ? " (" + esc(sp.join(", ")) + ")" : "") + " · " + esc(scopeText(d)) + "<br>" +
       "전체 " + rows.length + "건 중 비교사례 <b>" + st.n + "건</b>" +
       (st.land ? " · 토지단가 평균 <b>" + fmt(st.land.avg) + "</b> (최소 " + fmt(st.land.min) + " ~ 최대 " + fmt(st.land.max) + ") 만원/평" : "") +
