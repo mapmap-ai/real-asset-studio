@@ -73,6 +73,8 @@
     "#vmc select.cand{flex:1;min-width:260px}#vmc select.rg{max-width:220px}#vmc .ms{position:relative}#vmc .ms summary{list-style:none;cursor:pointer;border:1px solid #d0d5dd;border-radius:6px;padding:4px 22px 4px 7px;font-size:12.5px;max-width:250px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#fff}" +
     "#vmc .ms summary::-webkit-details-marker{display:none}#vmc .ms summary:after{content:'▾';position:absolute;right:7px;top:4px;color:#667085}" +
     "#vmc .ms .opts{position:absolute;z-index:5;top:100%;left:0;margin-top:2px;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.15);padding:8px;display:grid;gap:3px 12px;width:max-content;max-width:420px}" +
+    "#vmc .rgm{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px}#vmc .rgq{width:150px}#vmc .rgchips{display:inline-flex;flex-wrap:wrap;gap:4px}" +
+    "#vmc .rgchip{background:#FBEFE9;border:1px solid #EDB49C;color:#A04626;border-radius:12px;padding:1px 4px 1px 8px;font-size:12px;white-space:nowrap}#vmc .rgchip button{border:0;background:none;color:#A04626;cursor:pointer;padding:0 3px;font-size:13px}" +
     "#vmc .ms .opts.ptg{align-items:start}#vmc .ms .pg{display:flex;flex-direction:column}" +   // 예전 2칸 모양 그대로, 세부 유형은 그 아래 작게(2026-10-24)
     "#vmc .ms .subs{display:flex;flex-wrap:wrap;gap:0 6px;padding:0 0 1px 17px;max-width:150px}#vmc .ms .subs label{font-size:10.5px!important;line-height:1.35;color:#667085;font-weight:400}" +
     "#vmc .ms .subs input{width:11px;height:11px;margin:0 2px 0 0;vertical-align:-1px}" +
@@ -91,7 +93,9 @@
     '<label>기간 <input class="yr" type="number" data-k="y1" value="' + (thisYear - 4) + '">~<input class="yr" type="number" data-k="y2" value="' + thisYear + '"></label></div>' +
     '<div class="f" data-k="candrow" hidden><select class="cand" title="찾은 필지"></select></div>' +
     '<div class="f"><label><input type="radio" name="vmcsc" value="region" checked>같은 행정구역 <select class="rg" title="행정구역"><option value="">주소를 넣으면 고를 수 있습니다</option></select></label>' +
-    '<label><input type="radio" name="vmcsc" value="radius">반경 <input class="km" type="number" step="0.5" min="0.5" value="1">km</label></div>' +
+    '<label><input type="radio" name="vmcsc" value="radius">반경 <input class="km" type="number" step="0.5" min="0.5" value="1">km</label>' +
+    '<label title="행정구역 이름(구·군·동·읍·면·리)을 넣고 [추가] — 여러 개를 한꺼번에 찾습니다(예: 종로구, 중구)"><input type="radio" name="vmcsc" value="multi">여러 행정구역</label>' +
+    '<span class="rgm"><input class="rgq" type="text" placeholder="예: 종로구 · 서울 중구 · 역삼동"><select class="rgpick" hidden></select><button type="button" data-a="rgadd">추가</button><span class="rgchips"></span></span></div>' +
     '<div class="f"><label>유형 ' + multi("pt", TYPES, 2) + '</label><label>지목 ' + multi("jm", JIMOK, 4) + '</label><label>용도지역 ' + multi("zn", ZONES, 4) + '</label>' +
     '<label title="거래내역에 섞여 온 경매 낙찰(낙찰가율·감정가가 있는 기록)을 비교사례에서 뺍니다"><input type="checkbox" data-k="noauc" checked>경매 제외</label></div>' +
     '</div>' +
@@ -266,6 +270,44 @@
     if (sido) out.push({ lv: "sido", code: p.slice(0, 2), poly: p.slice(0, 2), prefix: p.slice(0, 2), depth: 1, name: sido, tag: "시·도 — 오래 걸림", full: sido });
     return out;
   }
+  // 여러 행정구역(2026-10-24 사용자 요청: 한강대로 100 을 찾은 뒤 CBD 처럼 종로구·중구를 함께). V.xr = [{code, depth, poly, prefix, full, name}]
+  V.xr = [];
+  async function regionByName(q) {
+    var tk = q.trim().split(/\s+/).filter(Boolean); if (!tk.length) return [];
+    var last = tk[tk.length - 1], front = tk.slice(0, -1).map(function (t) { return t.replace(/(특별시|광역시|특별자치시|특별자치도|도)$/, ""); });
+    var ad = await getJSON("/api/properties/addresses?keyword=" + encodeURIComponent(last));
+    var seen = {}, out = [];
+    (ad.addresses || []).forEach(function (c) {
+      if (front.some(function (f) { return c.address.indexOf(f) < 0; })) return;
+      regionsOf(c).forEach(function (r) {
+        var nm = r.name.split(" "); if (nm[nm.length - 1] !== last || seen[r.code]) return;
+        seen[r.code] = 1; out.push({ code: r.code, depth: r.depth, poly: r.poly, prefix: r.prefix, full: r.full, name: r.name, tag: r.tag });
+      });
+    });
+    return out;
+  }
+  function drawXr() {
+    $(".rgchips").innerHTML = V.xr.map(function (r, i) { return '<span class="rgchip" title="' + esc(r.full) + '">' + esc(r.name) + '<button type="button" data-a="rgdel" data-i="' + i + '" title="빼기">×</button></span>'; }).join("");
+  }
+  async function addRegion() {
+    var pick = $(".rgpick");
+    if (!pick.hidden && pick.value) {   // 같은 이름이 여러 곳이면 고른 것
+      var r0 = JSON.parse(pick.value); pick.hidden = true; pick.innerHTML = "";
+      if (!V.xr.some(function (x) { return x.code === r0.code; })) V.xr.push(r0);
+      $(".rgq").value = ""; drawXr(); P.querySelector('input[value="multi"]').checked = true; return msg("행정구역을 더했습니다: " + r0.full);
+    }
+    var q = $(".rgq").value.trim(); if (!q) return msg("행정구역 이름을 넣으세요(예: 종로구, 서울 중구, 역삼동).");
+    msg("행정구역 찾는 중… " + q);
+    var rs = []; try { rs = await regionByName(q); } catch (e) {}
+    if (!rs.length) return msg("'" + q + "' 행정구역을 찾지 못했습니다. 구·군·동·읍·면·리 이름으로 넣어 보세요(시는 '성남시 분당구'처럼 구까지).");
+    if (rs.length > 1) {
+      pick.innerHTML = rs.map(function (r) { return '<option value="' + esc(JSON.stringify(r)) + '">' + esc(r.full) + "</option>"; }).join(""); pick.hidden = false;
+      return msg("'" + q + "' 이(가) 여러 곳입니다 — 고른 뒤 [추가]를 다시 누르세요.");
+    }
+    if (!V.xr.some(function (x) { return x.code === rs[0].code; })) V.xr.push(rs[0]);
+    $(".rgq").value = ""; drawXr(); P.querySelector('input[value="multi"]').checked = true;
+    msg("행정구역을 더했습니다: " + rs[0].full + (V.xr.length > 1 ? " (모두 " + V.xr.length + "곳)" : ""));
+  }
   function fillRegions() {
     var c = V.cands[+$(".cand").value || 0], sel = $(".rg");
     if (!c) { sel.innerHTML = '<option value="">주소를 넣으면 고를 수 있습니다</option>'; return; }
@@ -365,6 +407,7 @@
     fillRegions();
     moveMapTo(V.cands[0]); subjPreview(V.cands[0]);
   }
+  $(".rgq").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); addRegion(); } });
   $(".addr").addEventListener("input", function () { clearTimeout(candTimer); var v = this.value; candTimer = setTimeout(function () { findCands(v); }, 450); });
   $(".cand").onchange = function () {
     var c = V.cands[+this.value];
@@ -585,23 +628,30 @@
     var region = cfg.region || { code: subjectPnu.slice(0, 10), depth: 3 };
     if (!region.poly) region.poly = region.depth === 3 && region.code.slice(8, 10) !== "00" ? region.code.slice(0, 8) + "00" : region.code;   // 예전 결과·기본값: 리는 읍·면 경계로
     if (!region.prefix) region.prefix = region.code;
-    var districtCode = region.code;
+    var RG = cfg.regions && cfg.regions.length ? cfg.regions : [region];
+    RG.forEach(function (r) { if (!r.poly) r.poly = r.depth === 3 && r.code.slice(8, 10) !== "00" ? r.code.slice(0, 8) + "00" : r.code; if (!r.prefix) r.prefix = r.code; });
+    var districtCode = RG.map(function (r) { return r.code; }).join(",");
     var dist = function (la, lo) {
       var r = Math.PI / 180, dLa = (la - lat0) * r, dLo = (lo - lng0) * r;
       var a = Math.pow(Math.sin(dLa / 2), 2) + Math.cos(lat0 * r) * Math.cos(la * r) * Math.pow(Math.sin(dLo / 2), 2);
       return 2 * 6371.0088 * Math.asin(Math.sqrt(a));
     };
-    var bbox;
+    var bbox, boxes = [];
     if (cfg.radiusKm) {
       var dLat = cfg.radiusKm / 111.2 + 0.002, dLng = cfg.radiusKm / (111.32 * Math.cos(lat0 * Math.PI / 180)) + 0.002;
-      bbox = [lng0 - dLng, lat0 - dLat, lng0 + dLng, lat0 + dLat];
+      bbox = [lng0 - dLng, lat0 - dLat, lng0 + dLng, lat0 + dLat]; boxes.push({ b: bbox, n: 6 });
     } else {
-      // 경계: depth 1 = 시·도(2자리), 2 = 시·군·구(5자리), 3 = 법정동(10자리, PNU 앞부분)
-      var poly = await (await fetch("/api/properties/cadastrals/districts/polygons?depth=" + region.depth + "&districtCode=" + region.poly)).text();
-      var pts = Array.from(poly.matchAll(/\[(1[23]\d\.\d+),\s*(3[3-8]\.\d+)\]/g)).map(function (m) { return [+m[1], +m[2]]; });
-      if (!pts.length) throw new Error("행정구역 경계를 받지 못했습니다(" + districtCode + "). 반경으로 해 보세요.");
-      var xs = pts.map(function (p) { return p[0]; }), ys = pts.map(function (p) { return p[1]; });
-      bbox = [Math.min.apply(null, xs) - 0.0005, Math.min.apply(null, ys) - 0.0005, Math.max.apply(null, xs) + 0.0005, Math.max.apply(null, ys) + 0.0005];
+      // 경계: depth 1 = 시·도(2자리), 2 = 시·군·구(5자리), 3 = 법정동(10자리, PNU 앞부분). 행정구역이 여러 개면 저마다
+      for (var ri = 0; ri < RG.length; ri++) {
+        var rg = RG[ri];
+        var poly = await (await fetch("/api/properties/cadastrals/districts/polygons?depth=" + rg.depth + "&districtCode=" + rg.poly)).text();
+        var pts = Array.from(poly.matchAll(/\[(1[23]\d\.\d+),\s*(3[3-8]\.\d+)\]/g)).map(function (m) { return [+m[1], +m[2]]; });
+        if (!pts.length) throw new Error("행정구역 경계를 받지 못했습니다(" + (rg.full || rg.code) + "). 반경으로 해 보세요.");
+        var xs = pts.map(function (p) { return p[0]; }), ys = pts.map(function (p) { return p[1]; });
+        var bb = [Math.min.apply(null, xs) - 0.0005, Math.min.apply(null, ys) - 0.0005, Math.max.apply(null, xs) + 0.0005, Math.max.apply(null, ys) + 0.0005];
+        boxes.push({ b: bb, n: rg.depth === 1 ? 16 : rg.depth === 2 ? 10 : 8 });
+        bbox = bbox ? [Math.min(bbox[0], bb[0]), Math.min(bbox[1], bb[1]), Math.max(bbox[2], bb[2]), Math.max(bbox[3], bb[3])] : bb;
+      }
     }
     // 마커 타일 조회: 한 타일 결과가 25개 이상이면 4분할해 다시 묻는다(누락 방지)
     var seen = {}, calls = 0, saturated = 0;
@@ -628,15 +678,18 @@
       if (a.length >= 25) saturated++;
       a.forEach(function (m) { seen[m.targetId] = m; });
     };
-    var N = cfg.radiusKm ? 6 : region.depth === 1 ? 16 : region.depth === 2 ? 10 : 8, jobs = [];
-    for (var i = 0; i < N; i++) for (var j = 0; j < N; j++)
-      jobs.push([bbox[0] + (bbox[2] - bbox[0]) * i / N, bbox[1] + (bbox[3] - bbox[1]) * j / N, bbox[0] + (bbox[2] - bbox[0]) * (i + 1) / N, bbox[1] + (bbox[3] - bbox[1]) * (j + 1) / N]);
+    var jobs = [];
+    boxes.forEach(function (bx) {
+      var B = bx.b, N = bx.n;
+      for (var i = 0; i < N; i++) for (var j = 0; j < N; j++)
+        jobs.push([B[0] + (B[2] - B[0]) * i / N, B[1] + (B[3] - B[1]) * j / N, B[0] + (B[2] - B[0]) * (i + 1) / N, B[1] + (B[3] - B[1]) * (j + 1) / N]);
+    });
     for (var k = 0; k < jobs.length; k += 4) await Promise.all(jobs.slice(k, k + 4).map(function (b) { return tile(b[0], b[1], b[2], b[3], 0); }));
     if (V.stop) throw new Error("멈췄습니다.");
     var byPnu = {};
     Object.values(seen).forEach(function (m) {
       m.distKm = dist(m.latitude, m.longitude);
-      if (cfg.radiusKm ? m.distKm > cfg.radiusKm : !m.pnu.startsWith(region.prefix)) return;
+      if (cfg.radiusKm ? m.distKm > cfg.radiusKm : !RG.some(function (r) { return m.pnu.startsWith(r.prefix); })) return;
       if (!byPnu[m.pnu] || byPnu[m.pnu].distKm > m.distKm) byPnu[m.pnu] = m;
     });
     var pnus = Object.keys(byPnu).filter(function (p) { return p !== subjectPnu; });
@@ -656,7 +709,7 @@
     }
     return {
       generatedAt: new Date().toISOString(), config: cfg, subject: subject, zoneCode: zoneCode,
-      districtCode: cfg.radiusKm ? null : districtCode, regionName: cfg.radiusKm ? null : (region.full || null), bbox: bbox,
+      districtCode: cfg.radiusKm ? null : districtCode, regionName: cfg.radiusKm ? null : (RG.map(function (r) { return r.full; }).filter(Boolean).join(" · ") || null), bbox: bbox,
       meta: { tileCalls: calls, saturatedLeaves: saturated, lotCount: lots.length, center: [lat0, lng0],
         parseFailures: lots.filter(function (l) { return !l.ok; }).map(function (l) { return l.pnu; }),
         pagedHistories: lots.filter(function (l) { return l.historiesHasNext; }).map(function (l) { return l.pnu; }) },
@@ -1062,6 +1115,8 @@
       P.remove(); css.remove(); delete window.__VM_COMPS;
       VMC();
     }
+    else if (a === "rgadd") addRegion();
+    else if (a === "rgdel") { V.xr.splice(+b.dataset.i, 1); drawXr(); }
     else if (a === "close") { P.style.display = "none"; vmMapMark(); if ($('[data-k="mapbig"]').checked) { $('[data-k="mapbig"]').checked = false; vmMapBig(false); } }
     else if (a === "stop") { V.stop = true; msg("멈추는 중…"); }
     else if (a === "cfg") cfgFold(!$(".cfg").hidden);
@@ -1077,10 +1132,11 @@
       if (!V.cands.length || V.candFor !== addr) await findCands(addr);
       var cand = V.cands[+$(".cand").value || 0];
       if (!cand) { msg("주소를 찾지 못했습니다: " + addr); return; }
-      var radius = P.querySelector('input[name="vmcsc"]:checked').value === "radius" ? +$(".km").value : 0;
+      var scope = P.querySelector('input[name="vmcsc"]:checked').value, radius = scope === "radius" ? +$(".km").value : 0;
+      if (scope === "multi" && !V.xr.length) { msg("여러 행정구역: 이름을 넣고 [추가]로 한 곳 이상 더하세요."); return; }
       var ro = $(".rg").options[$(".rg").selectedIndex];
-      var region = !radius && ro && ro.value ? { code: ro.value, depth: +ro.dataset.depth, full: ro.dataset.full, poly: ro.dataset.poly, prefix: ro.dataset.prefix } : null;
-      var cfg = { address: addr, cand: cand, years: years, types: types, zones: zones, jimoks: jimoks, details: details, region: region, radiusKm: radius || null, noAuction: $('[data-k="noauc"]').checked };
+      var region = scope === "multi" ? null : !radius && ro && ro.value ? { code: ro.value, depth: +ro.dataset.depth, full: ro.dataset.full, poly: ro.dataset.poly, prefix: ro.dataset.prefix } : null;
+      var cfg = { address: addr, cand: cand, years: years, types: types, zones: zones, jimoks: jimoks, details: details, region: region, regions: scope === "multi" ? V.xr.slice() : null, radiusKm: radius || null, noAuction: $('[data-k="noauc"]').checked };
       V.stop = false; b.disabled = true; $('[data-a="stop"]').disabled = false;
       try {
         V.data = await collect(cfg); V.rows = toRows(V.data); if (V.dupLatest) dupLatest(true); save(); render(); cfgFold(true);
