@@ -176,7 +176,7 @@
     "#emp .msg{min-height:16px;font-size:12px;color:#b45309}#emp table{border-collapse:collapse;width:100%;font-size:12px;table-layout:auto!important}#emp th,#emp td{width:1%}#emp th:nth-child(2),#emp td:nth-child(2){width:auto}" +
     "#emp th,#emp td{border-bottom:1px solid #eaecf0;padding:4px 5px;text-align:left;white-space:nowrap}#emp th{background:#f6f7f9;position:sticky;top:0}" +
     "#emp td.n,#emp th.n{text-align:right}#emp td.z{white-space:normal;min-width:112px;max-width:160px}#emp .tw tbody tr{cursor:pointer;user-select:none}#emp .tw tbody tr:hover td{background:#f3f6fb}#emp tr.sel td{background:#fff7d6}#emp tr.off td{color:#98a2b3}#emp tr.off .no{background:#d0d5dd}#emp input.inc{margin:0 4px 0 0;vertical-align:-2px;accent-color:#D9653B}" +
-    "#emp .gr{display:inline-block;width:12px;margin-right:3px;color:#b0b7c3;cursor:grab;font-size:13px;user-select:none}#emp tr:hover .gr{color:#475467}" +
+    "#emp th.h0 .gsp{display:inline-block;width:15px}#emp th.h0 .incall{margin:0 8px 0 0;vertical-align:-2px;accent-color:#D9653B}#emp .gr{display:inline-block;width:12px;margin-right:3px;color:#b0b7c3;cursor:grab;font-size:13px;user-select:none}#emp tr:hover .gr{color:#475467}" +
     "#emp tr.drag td{opacity:.35}#emp tr.drb td{box-shadow:inset 0 3px 0 var(--emp-c,#D9653B)}#emp tr.dra td{box-shadow:inset 0 -3px 0 var(--emp-c,#D9653B)}" +
     "#emp tfoot td{font-weight:700;background:#f6f7f9}#emp tfoot td.sumv{width:auto}#emp .no{display:inline-block;min-width:19px;height:19px;line-height:19px;border-radius:10px;background:var(--emp-c,#D9653B);color:#fff;text-align:center;font-size:11px;font-weight:700}" +
     "#emp .sw{display:inline-flex;align-items:center;gap:4px;cursor:pointer;font-weight:600}#emp .sw input{position:absolute;opacity:0;width:0;height:0}" +
@@ -212,7 +212,7 @@
     }).join("") + '</table><div class="bgn">위에 있는 것이 위에 그려집니다. 0% = 진하게, 숫자가 클수록 흐리게.</div></div></div>' +
     '<label>필지 색 <input type="color" data-x="color" value="' + E.color + '"></label><button class="rs" data-a="color0" title="기본색으로 되돌리기">기본색</button>' +
     '<label title="0% = 진하게 칠함, 100% = 테두리만">칠 투명도 <input type="range" data-x="ft" min="0" max="100" step="5" value="' + E.ft + '"> <output class="fto">' + E.ft + '%</output></label></div>' +
-    '<div class="msg" role="status"></div><div class="tw"><table><thead><tr><th><label class="sw" title="지도에 번호 표시 켜기/끄기">#<input type="checkbox" data-x="showNo" checked><i></i></label></th><th><label class="sw" title="지도에 지번 표시 켜기/끄기">지번<input type="checkbox" data-x="showJibun" checked><i></i></label></th><th>지목</th><th class="n">면적(㎡)</th><th class="n">평</th><th>용도지역</th><th class="n" title="원/㎡">공시지가(㎡당)</th><th></th></tr></thead>' +
+    '<div class="msg" role="status"></div><div class="tw"><table><thead><tr><th class="h0"><span class="gsp"></span><input type="checkbox" class="incall" checked title="모든 필지 포함 / 모두 빼기"><label class="sw" title="지도에 번호 표시 켜기/끄기">#<input type="checkbox" data-x="showNo" checked><i></i></label></th><th><label class="sw" title="지도에 지번 표시 켜기/끄기">지번<input type="checkbox" data-x="showJibun" checked><i></i></label></th><th>지목</th><th class="n">면적(㎡)</th><th class="n">평</th><th>용도지역</th><th class="n" title="원/㎡">공시지가(㎡당)</th><th></th></tr></thead>' +
     '<tbody></tbody><tfoot><tr><td></td><td class="cnt"></td><td></td><td class="n sum"></td><td class="n sump"></td><td></td><td class="n sumv" colspan="2"></td></tr></tfoot></table></div></div>';
   document.body.appendChild(P);
   P.style.setProperty("--emp-c", E.color);
@@ -407,7 +407,8 @@
       });
       tb.appendChild(tr);
     });
-    var nOff = E.list.length - no;
+    var nOff = E.list.length - no, ia = $p(".incall");
+    if (ia) { ia.checked = E.list.length > 0 && nOff === 0; ia.indeterminate = nOff > 0 && no > 0; }   // 일부만 빼면 반쯤 체크
     $p(".cnt").textContent = no + "필지 합계" + (nOff ? " (뺀 " + nOff + ")" : "");
     $p(".sum").textContent = fmt(sum); $p(".sump").textContent = fmt(sum * 0.3025);
     // 공시지가 합계 = Σ(면적㎡ × 공시지가 원/㎡), 백만원
@@ -416,6 +417,11 @@
     sv.title = "면적(㎡) × 공시지가(원/㎡) 합계" + (noPrice ? " · 공시지가나 면적이 없는 " + noPrice + "필지는 빠짐" : "");
     try { localStorage.setItem(KEY, JSON.stringify(E.list.map(function (p) { return p.pnu; }))); } catch (e) {}
   }
+  // 머리 체크 = 모든 필지 포함 / 모두 빼기(2026-10-24 사용자 요청)
+  P.addEventListener("change", function (e) {
+    if (!e.target.classList || !e.target.classList.contains("incall")) return;
+    var on = e.target.checked; E.list.forEach(function (p) { p.off = !on; }); saveOff(); render();
+  });
   function saveOff() { try { localStorage.setItem(KEY + "Off", JSON.stringify(E.list.filter(function (p) { return p.off; }).map(function (p) { return p.pnu; }))); } catch (e) {} }
   function unmark() { Array.prototype.forEach.call(P.querySelectorAll(".drag,.dra,.drb"), function (x) { x.classList.remove("drag", "dra", "drb"); }); }
   // ── '지도 열기'(2026-10-22 사용자 요청: 캡처용). 칠한 필지 경계(EPSG:5179)를 WGS84 로 바꿔 새 창에 넘기고, 그 창에서 카카오 지도(원래 좌표계
