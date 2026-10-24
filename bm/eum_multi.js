@@ -48,8 +48,8 @@
       var pt = g.getType() === "MultiPolygon" ? g.getInteriorPoints() : g.getInteriorPoint();
       return [
         new ol.style.Style({   // Ctrl+클릭으로 고른 필지 = 제 색 채움 + 진한 점선 테두리(색을 바꾸며 바로 보이게)
-          stroke: new ol.style.Stroke({ color: on || mu ? shade(col, .55) : col, width: on || mu ? 4 : 2.5, lineDash: mu ? [9, 5] : undefined }),
-          fill: new ol.style.Fill({ color: on ? "rgba(255,214,10,.45)" : rgba(col, mu ? Math.min(1, fillA() + .15) : fillA()) })
+          stroke: new ol.style.Stroke({ color: on || mu ? shade(col, .55) : col, width: on || mu ? 4 : 2.5 }),   // 여러 개 골라도 한 개 고를 때처럼 노랗게(2026-10-24)
+          fill: new ol.style.Fill({ color: on || mu ? "rgba(255,214,10,.45)" : rgba(col, fillA()) })
         }),
         new ol.style.Style({
           geometry: pt,
@@ -92,7 +92,10 @@
     var swapBbox = function (tile, src) {
       tile.getImage().src = src.replace(/BBOX=([^&]+)/, function (m, v) { var a = decodeURIComponent(v).split(","); return "BBOX=" + [a[1], a[0], a[3], a[2]].join(","); });
     };
-    var l = new ol.layer.Tile({ source: new ol.source.TileWMS({ url: "https://api.vworld.kr/req/wms", projection: map.getView().getProjection(), tileLoadFunction: swapBbox,
+    // 브이월드는 1픽셀이 2m 를 넘게 부르면(대략 1:7,500 보다 작은 축척) 지적도를 빈 그림으로 준다(2026-10-24 확인) → 조각은 늘 1m/px 이하로 받고
+    //   지도를 축소하면 그 조각을 줄여 보인다. 4m/px 보다 더 축소하면 조각이 너무 많아 그리지 않고 안내한다(maxResolution)
+    var jgrid = new ol.tilegrid.TileGrid({ origin: [0, 0], resolutions: [1, 0.5, 0.25, 0.125], tileSize: 512 });
+    var l = new ol.layer.Tile({ maxResolution: 4.01, source: new ol.source.TileWMS({ url: "https://api.vworld.kr/req/wms", projection: map.getView().getProjection(), tileLoadFunction: swapBbox, tileGrid: jgrid,
       params: { LAYERS: "lp_pa_cbnd_bubun,lp_pa_cbnd_bonbun", STYLES: "lp_pa_cbnd_bubun,lp_pa_cbnd_bonbun", FORMAT: "image/png", TRANSPARENT: true, VERSION: "1.3.0",
         KEY: vworldKey(), DOMAIN: "www.eum.go.kr" } }) });   // 1.3.0 만 받는다(1.1.1 은 거절). EPSG:5179 bbox 는 x,y 순서 그대로 됨(2026-10-24 확인)
     l.on("precompose", function (e) { e.context.filter = "grayscale(1) contrast(1.6)"; });
@@ -113,6 +116,9 @@
   var extOn = function () { return bgOn("ksky") || bgOn("kmap") || bgOn("jijuk"); };   // 우리 조각을 하나라도 켰는가(저장 막힘 안내)
   function eumTiles() { return map.getLayers().getArray().filter(function (l) { return l instanceof ol.layer.Tile && bgAll.indexOf(l) < 0; }); }
   function syncEum() {
+    // 토지이음이 축척을 바꾸며 지도 층을 다시 만들 때 우리 배경 층이 빠지기도 한다(2026-10-24 확인) → 켜 둔 층이 없으면 다시 넣는다
+    var have = map.getLayers().getArray();
+    BGL.forEach(function (b) { if (b.layers && bgOn(b.k)) b.layers.forEach(function (l) { if (have.indexOf(l) < 0) map.addLayer(l); }); });
     var eo = bgOn("eum"), ea = 1 - E.bgs.t.eum / 100;
     eumTiles().forEach(function (l) { if (l.getVisible() !== eo) l.setVisible(eo); if (eo && l.getOpacity() !== ea) l.setOpacity(ea); });
     BGL.forEach(function (b) { if (b.layers) b.layers.forEach(function (l) { l.setOpacity(1 - E.bgs.t[b.k] / 100); }); });
@@ -128,7 +134,13 @@
     });
     syncEum(); map.render(); bgSum();
   }
-  setInterval(syncEum, 1500);   // 토지이음이 층을 다시 만들면 감추기·진하기를 다시 맞춘다
+  setInterval(syncEum, 1500);
+  // 지적도를 켰는데 너무 축소했으면 알려 준다
+  map.getView().on("change:resolution", function () {
+    if (!bgOn("jijuk")) return;
+    var far = map.getView().getResolution() > 4.01, m = $p && $p(".msg");
+    if (far && m && !/더 확대/.test(m.textContent)) msg("지적도(백지도)는 지도를 조금 더 확대하면 보입니다(브이월드가 아주 작은 축척에서는 지적도를 주지 않음).");
+  });   // 토지이음이 층을 다시 만들면 감추기·진하기를 다시 맞춘다
 
   // 고르기 모드 동안 토지이음 자체 클릭(한 필지 선택·팝업)을 막는다
   var origClick = $.fn.clickPnu;
@@ -183,7 +195,7 @@
     '<div class="row bgrow"><div class="bgdd"><button type="button" data-a="bgdd" class="bgsum" title="배경을 여러 개 겹치고 저마다 투명도를 정합니다">배경</button><div class="bgl" hidden>' +
     '<table class="bgt"><colgroup><col style="width:150px"><col style="width:46px"><col style="width:108px"><col style="width:40px"></colgroup>' +
     BGL.slice().reverse().map(function (b) {   // 위에 그려지는 것부터(토지이음 CSS 가 div·label 배치를 흐트러뜨려 표로 짠다)
-      return '<tr><td><label><input type="checkbox" data-bk="' + b.k + '"> ' + b.name + '</label></td><td class="bs">투명도</td><td><input type="range" data-bt="' + b.k + '" min="0" max="' + (b.k === "eum" ? 100 : 90) + '" step="5" value="0"></td><td class="bo"><output data-bo="' + b.k + '">0%</output></td></tr>';
+      return '<tr><td><label><input type="checkbox" data-bk="' + b.k + '"> ' + b.name + '</label></td><td class="bs">투명도</td><td><input type="range" data-bt="' + b.k + '" min="0" max="100" step="5" value="0"></td><td class="bo"><output data-bo="' + b.k + '">0%</output></td></tr>';
     }).join("") + '</table><div class="bgn">위에 있는 것이 위에 그려집니다. 0% = 진하게, 숫자가 클수록 흐리게.</div></div></div>' +
     '<label>필지 색 <input type="color" data-x="color" value="' + E.color + '"></label><button class="rs" data-a="color0" title="기본색으로 되돌리기">기본색</button>' +
     '<label title="0% = 진하게 칠함, 100% = 테두리만">칠 투명도 <input type="range" data-x="ft" min="0" max="100" step="5" value="' + E.ft + '"> <output class="fto">' + E.ft + '%</output></label></div>' +
@@ -306,7 +318,7 @@
     var j = String(pr.jibun || "").replace(/^산\s*/, ""), jm = /^(.*?\d)([^\d]*)$/.exec(j);
     var p = { pnu: pnu, jibun: (pnu.charAt(10) === "2" ? "산 " : "") + (jm ? jm[1] : j), jimok: jm ? jm[2] : "", address: "", feature: f, origin: origin };
     if (E.offSaved && E.offSaved.indexOf(pnu) >= 0) p.off = true;
-    E.list.push(p); src.addFeature(f); E.sel = pnu;
+    E.list.push(p); src.addFeature(f);   // 사용자가 고르기 전에는 노랗게 칠하지 않는다(2026-10-24)
     return p;
   }
   function addPnu(pnu) {
@@ -577,30 +589,58 @@
   } });
   zlayer.set("name", "eumMultiZone"); map.addLayer(zlayer); zlayer.setZIndex(9998);
   setInterval(function () { if (map.getLayers().getArray().indexOf(zlayer) < 0) { map.addLayer(zlayer); zlayer.setZIndex(9998); } }, 1500);
-  var draw = new ol.interaction.Draw({ type: "Polygon", freehandCondition: function () { return true; }, condition: function () { return true; },
-    style: new ol.style.Style({ stroke: new ol.style.Stroke({ color: "#1d2433", width: 2, lineDash: [8, 6] }), fill: new ol.style.Fill({ color: "rgba(217,101,59,.10)" }),
-      image: new ol.style.Circle({ radius: 3, fill: new ol.style.Fill({ color: "#1d2433" }) }) }) });
+  // 구역 그리기(2026-10-24 고침): 누른 채 끌면 그 길을 따라, 짧게 누르면 그 자리에 점을 찍으며 둘레를 이어 그린다. 손을 떼도 닫히지 않고
+  //   더블클릭(또는 Enter) 하면 그대로 닫혀 묶인다 — 끝이 처음 점과 딱 맞지 않아도 된다. Esc = 그리던 것 취소. 더블클릭 확대는 그동안 끈다
+  var dsrc = new ol.source.Vector(), dlayer = new ol.layer.Vector({ source: dsrc, style: new ol.style.Style({ stroke: new ol.style.Stroke({ color: "#1d2433", width: 2, lineDash: [8, 6] }), fill: new ol.style.Fill({ color: "rgba(217,101,59,.10)" }) }) });
+  dlayer.setZIndex(9997);
+  var dpts = [], dfeat = null;
+  var dpush = function (c) {
+    var last = dpts[dpts.length - 1], r = map.getView().getResolution();
+    if (last && Math.abs(last[0] - c[0]) + Math.abs(last[1] - c[1]) < r * 4) return;   // 4px 안 가까운 점은 버린다
+    dpts.push(c);
+    var ring = dpts.concat([dpts[0]]);
+    if (!dfeat) { dfeat = new ol.Feature(new ol.geom.Polygon([ring])); dsrc.addFeature(dfeat); } else dfeat.getGeometry().setCoordinates([ring]);
+  };
+  var dreset = function () { dpts = []; dfeat = null; dsrc.clear(); };
+  var draw = new ol.interaction.Pointer({
+    handleDownEvent: function (e) { dpush(e.coordinate); return true; },   // true = 끌기를 이 그리기가 받는다(지도가 끌려 가지 않음)
+    handleDragEvent: function (e) { dpush(e.coordinate); },
+    handleUpEvent: function () { return false; }
+  });
+  function dfinish() {
+    if (dpts.length < 3) { dreset(); return; }
+    var fz = new ol.Feature(new ol.geom.Polygon([dpts.concat([dpts[0]])])); dreset();
+    zoneDone(fz);
+  }
+  var dblFn = function (e) { if (!E.zoneOn) return; e.preventDefault && e.preventDefault(); dfinish(); return false; };
+  var keyFn = function (e) { if (!E.zoneOn) return; if (e.key === "Enter") dfinish(); if (e.key === "Escape") dreset(); };
+  var dcz = function () { return map.getInteractions().getArray().filter(function (x) { return x instanceof ol.interaction.DoubleClickZoom; }); };
   var zp = document.createElement("div"); zp.id = "empZone"; zp.hidden = true; document.body.appendChild(zp);
   var zName = function (n) { return "구역 " + String.fromCharCode(64 + ((n - 1) % 26) + 1) + (n > 26 ? Math.ceil(n / 26) : ""); };   // 1 → 구역 A
   function hideZp() { zp.hidden = true; }
   function zoneMode(on) {
     E.zoneOn = on; var b = $p("[data-a=zone]"); if (b) b.classList.toggle("on", on);
-    if (on) map.addInteraction(draw); else { map.removeInteraction(draw); hideZp(); }
-    zlayer.setVisible(on);   // 끄면 그린 도형을 지도에서 감춘다(2026-10-24 사용자 요청) — 다시 켜면 다시 보인다
+    if (on) { dreset(); map.addLayer(dlayer); map.addInteraction(draw); map.on("dblclick", dblFn); document.addEventListener("keydown", keyFn); dcz().forEach(function (x) { x.setActive(false); }); }
+    else {
+      map.removeInteraction(draw); map.removeLayer(dlayer); map.un("dblclick", dblFn); document.removeEventListener("keydown", keyFn); dcz().forEach(function (x) { x.setActive(true); });
+      dreset(); hideZp();
+      // 끄면 그린 구역 점선·묶음을 지운다(2026-10-24 사용자 요청) — 다시 켜면 구역 A 부터 새로. 목록 번호 순서는 그대로
+      zsrc.clear(); E.zc = 0; E.ng = 0; E.list.forEach(function (p) { delete p.grp; });
+    }
     var zc = $p("[data-a=zoneclr]"); if (zc) zc.hidden = !on;
     document.body.classList.toggle("emp-zone", on);
-    msg(on ? "지도 위에서 마우스를 누른 채 끌어 구역 둘레를 그리세요(손을 떼면 닫힘) — 그 안 필지의 수·면적·공시지가 합계가 뜹니다. 끝나면 [구역 묶기]를 다시 눌러 끄세요." : "");
+    msg(on ? "지도 위에서 누른 채 끌거나 점을 찍어 구역 둘레를 그리고, 더블클릭(또는 Enter)하면 묶입니다 — 그 안 필지의 수·면적·공시지가 합계가 뜹니다. Esc = 그리던 것 취소. 끝나면 [구역 묶기]를 다시 눌러 끄세요(그린 구역도 지워짐)." : "");
   }
   function zoneClear() {   // 도형·묶음을 모두 지우고 처음부터 다시 그린다
     zsrc.clear(); hideZp(); E.ng = 0; E.zc = 0; E.list.forEach(function (p) { delete p.grp; }); E.multi = []; render();
     msg("구역을 모두 지웠습니다. 다시 그리세요(목록 번호 순서는 그대로).");
   }
   function zonePnus(fz) { return E.list.filter(function (p) { return p.grp === fz.get("grp"); }).map(function (p) { return p.pnu; }); }
-  draw.on("drawend", function (ev) {
-    var fz = ev.feature, geom = fz.getGeometry(), ext = geom.getExtent();
+  function zoneDone(fz) {
+    var geom = fz.getGeometry(), ext = geom.getExtent();
     E.zc = (E.zc || 0) + 1; var nm = zName(E.zc); fz.set("label", nm); fz.set("zid", E.zc);
     var hits = IL().filter(function (p) { return geom.intersectsCoordinate(ol.extent.getCenter(p.feature.getGeometry().getExtent())); });
-    setTimeout(function () { zsrc.addFeature(fz); }, 0);   // Draw 가 끝난 뒤 우리 층에 남긴다
+    zsrc.addFeature(fz);
     var sum = 0, val = 0, noP = 0; hits.forEach(function (p) { sum += +p.area || 0; if (p.area && p.price) val += p.area * p.price; else noP++; });
     var fresh = hits.filter(function (p) { return !p.grp; }), done = E.list.filter(function (p) { return p.grp; }).length;
     var px = map.getPixelFromCoordinate(ol.extent.getTopRight(ext)), vr = map.getViewport().getBoundingClientRect();
@@ -631,7 +671,7 @@
       if (z === "del") { zsrc.removeFeature(fz); if (fz.get("grp")) { E.list.forEach(function (p) { if (p.grp === fz.get("grp")) delete p.grp; }); render(); } hideZp(); }
       if (z === "x") hideZp();
     };
-  });
+  }
 
   // ── 지도 클릭으로 고르기
   map.on("singleclick", function (e) {
@@ -724,7 +764,7 @@
   P.querySelectorAll("[data-bk]").forEach(function (c) {
     c.onchange = function () {
       E.bgs.on[c.dataset.bk] = c.checked; applyBg(); saveBg();
-      msg(extOn() ? "카카오·지적도 배경을 쓰면 토지이음 '저장' 단추가 막힙니다(새로고침하면 풀림). 그림 파일이 필요하면 Win+Shift+S 로 캡처하세요." : "");
+      msg(extOn() ? "그림 파일이 필요하면 Win+Shift+S 로 캡처하세요." : "");
     };
   });
   P.querySelectorAll("[data-bt]").forEach(function (r) {
