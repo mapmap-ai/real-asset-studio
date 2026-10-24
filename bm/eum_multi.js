@@ -459,6 +459,7 @@
       if (k === "jijuk") { if (!needKey()) return false; if (!B.jijuk.length) B.jijuk = [jjLayer()]; }
       cur.forEach(function (l) { m.removeLayer(l); }); cur = B[k]; cur.forEach(function (l, i) { l.addTo(m); l.setZIndex(i + 1); l.setOpacity(op); }); return true; }
     var g = L.layerGroup().addTo(m), shapes = [];
+    var dark = function (hex) { var n = parseInt(String(hex).slice(1), 16); if (isNaN(n)) return "#1d2433"; return "rgb(" + [n >> 16 & 255, n >> 8 & 255, n & 255].map(function (v) { return Math.round(v * .45); }).join(",") + ")"; };
     function draw() {
       g.clearLayers(); shapes = [];
       D.parcels.forEach(function (p, i) {
@@ -466,7 +467,9 @@
         var ly = L.geoJSON(p.geo, { style: { color: cc, weight: 2.5, fillColor: cc, fillOpacity: 1 - ft / 100 } }).addTo(g);
         var lab = [showNo ? String(i + 1) + (showJb ? "." : "") : "", showJb ? p.jibun : ""].join(showNo && showJb ? " " : "");
         // 이름표는 필지 범위 한가운데에 따로 놓는다 — Leaflet 이 아주 작은 필지의 무게중심을 구하다 0 으로 나눠 화면 밖(수백만 px)에 두던 문제(2026-10-23)
-        if (lab) g.addLayer(L.tooltip({ permanent: true, direction: "center", className: "plb", interactive: false }).setLatLng(ly.getBounds().getCenter()).setContent(lab));
+        //   이름표 자리 = 토지이음에서 넘긴 필지 안쪽 점(없으면 범위 한가운데). 모양 = 토지이음처럼 흰 테두리 글자, 색은 필지 색을 진하게(2026-10-24)
+        if (lab) g.addLayer(L.tooltip({ permanent: true, direction: "center", className: "plb", interactive: false }).setLatLng(p.lab || ly.getBounds().getCenter())
+          .setContent('<span style="color:' + dark(cc) + '">' + lab.replace(/&/g, "&amp;").replace(/[<]/g, "&lt;") + "</span>"));
         ly.bindPopup("<b>" + (i + 1) + ". " + p.jibun + "</b><br>" + (p.jimok || "") + " · " + (p.area ? p.area.toLocaleString() + "㎡" : "") + "<br>" + (p.zone || "") + (p.price ? " · 공시지가 " + p.price.toLocaleString() + "원/㎡" : ""));
         shapes.push(ly);
       });
@@ -507,12 +510,21 @@
       if (navigator.clipboard) navigator.clipboard.writeText(D.tsv).then(done, old); else old();
     };
   }
+  // 필지 안쪽 점(2026-10-24): 범위 한가운데는 ㄱ자·긴 필지에서 필지 밖으로 나간다 → 토지이음 이름표와 같은 getInteriorPoint(여러 조각이면 가장 큰 조각)
+  function labPoint(f, proj) {
+    try {
+      var g = f.getGeometry(), pt;
+      if (g.getType() === "MultiPolygon") { var ps = g.getPolygons().sort(function (a, b) { return b.getArea() - a.getArea(); }); pt = ps[0].getInteriorPoint().getCoordinates(); }
+      else pt = g.getInteriorPoint().getCoordinates();
+      var ll = ol.proj.transform([pt[0], pt[1]], proj, "EPSG:4326"); return [+ll[1].toFixed(7), +ll[0].toFixed(7)];   // [위도, 경도]
+    } catch (e) { return null; }
+  }
   function openMapWindow() {
     var L0 = IL(); if (!L0.length) return msg("칠한(포함한) 필지가 없습니다.");
     var gj = new ol.format.GeoJSON(), proj = map.getView().getProjection();
     var parcels = L0.map(function (p) {
       return { jibun: p.jibun, address: p.address || p.jibun, jimok: p.jimok || "", area: p.area || null, zone: p.zone || "", price: p.price || null, color: E.pc[p.pnu] || null,
-        geo: gj.writeFeatureObject(p.feature, { featureProjection: proj, dataProjection: "EPSG:4326", decimals: 7 }) };
+        geo: gj.writeFeatureObject(p.feature, { featureProjection: proj, dataProjection: "EPSG:4326", decimals: 7 }), lab: labPoint(p.feature, proj) };
     });
     var sum = 0, val = 0; L0.forEach(function (p) { sum += +p.area || 0; if (p.area && p.price) val += p.area * p.price; });
     var head = ["번호", "소재지", "지목", "면적(㎡)", "면적(평)", "용도지역", "공시지가(원/㎡)", "공시지가 합계(백만원)"];
@@ -536,7 +548,7 @@
       ".lay input[type=range]{width:100px;accent-color:#D9653B}.lay input[type=color]{width:26px;height:22px;padding:0;border:1px solid #d0d5dd;border-radius:4px}" +
       ".zm{position:absolute;z-index:1000;left:10px;top:10px;display:flex;flex-direction:column;background:#fff;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.3);overflow:hidden}" +
       ".zm button{border:0;border-bottom:1px solid #eaecf0;background:#fff;width:34px;height:30px;font-size:17px;cursor:pointer}.zm button:hover{background:#fff1ea}.zm span{font-size:10.5px;color:#667085;text-align:center;padding:2px 0}" +
-      ".plb{background:rgba(255,255,255,.92);border:1px solid rgba(0,0,0,.15);border-radius:4px;padding:1px 5px;font-weight:700;font-size:12px;color:#1d2433;box-shadow:none}.plb:before{display:none}" +
+      ".plb{background:none;border:0;padding:0;box-shadow:none;font-weight:700;font-size:13px;color:#1d2433;white-space:nowrap;text-shadow:-2px 0 #fff,2px 0 #fff,0 -2px #fff,0 2px #fff,-1.5px -1.5px #fff,1.5px -1.5px #fff,-1.5px 1.5px #fff,1.5px 1.5px #fff}.plb:before{display:none}" +
       ".wrap{padding:12px 18px}.tbar{display:flex;align-items:center;gap:8px;margin-bottom:6px}.tbar b{flex:1;font-size:14px}.btn{border:1px solid #d0d5dd;background:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font:inherit}" +
       "table{border-collapse:collapse;width:100%;background:#fff;font-size:12.5px}th,td{border:1px solid #e4e7ec;padding:4px 7px;white-space:nowrap}th{background:#f2f4f7}td.n{text-align:right}" +
       "td.no span{display:inline-block;min-width:20px;height:20px;line-height:20px;border-radius:10px;color:#fff;text-align:center;font-size:11px;font-weight:700}tfoot td{font-weight:700;background:#f6f7f9}</style></head><body>" +
