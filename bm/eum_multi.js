@@ -204,7 +204,7 @@
     '<div class="hd"><b>여러 필지 선택</b><button data-a="reset" title="새로고침 — 고른 필지·배경·이름표를 지우고 처음 상태로">↻</button><button data-a="min" title="접기">–</button><button data-a="close" title="닫기">×</button></div>' +
     '<div class="bd"><textarea placeholder="지번을 한 줄에 하나씩 (예: 용산구 한강로2가 424) · PNU 19자리도 됩니다"></textarea>' +
     '<div class="row"><button class="pri" data-a="add">목록 추가</button><button data-a="stopadd" class="on" hidden>추가 멈춤</button><button data-a="pick">지도 클릭으로 고르기</button><button data-a="fit">전체 보기</button><button data-a="zone" title="지도에 마우스로 구역 둘레를 그려 그 안 필지의 수·면적·공시지가 합계를 보고, 구역별로 번호·색을 정합니다">구역 묶기</button><button data-a="zoneclr" hidden title="그린 구역을 모두 지우고 다시 그립니다">구역 지우기</button>' +
-    '<button data-a="mapopen" class="pri2" title="칠한 필지를 새 창의 선명한 카카오 지도 위에 — 캡처하기 좋게">지도 열기</button><button data-a="copy">표 복사</button><button data-a="link">링크 복사</button><button data-a="clear">모두 지우기</button></div>' +
+    '<button data-a="mapopen" class="pri2" title="칠한 필지를 새 창의 선명한 카카오 지도 위에 — 캡처하기 좋게">지도 열기</button><button data-a="copy">표 복사</button><button data-a="link">링크 복사</button><button data-a="clear">모두 지우기</button><button data-a="mapsave" title="[지도 열기] 화면을 HTML 파일 하나로 내려받기 — 받은 사람이 열어도 그대로 보입니다">지도 HTML 저장</button></div>' +
     '<div class="row bgrow"><div class="bgdd"><button type="button" data-a="bgdd" class="bgsum" title="배경을 여러 개 겹치고 저마다 투명도를 정합니다">배경</button><div class="bgl" hidden>' +
     '<table class="bgt"><colgroup><col style="width:150px"><col style="width:46px"><col style="width:108px"><col style="width:40px"></colgroup>' +
     BGL.slice().reverse().map(function (b) {   // 위에 그려지는 것부터(토지이음 CSS 가 div·label 배치를 흐트러뜨려 표로 짠다)
@@ -519,7 +519,7 @@
       var ll = ol.proj.transform([pt[0], pt[1]], proj, "EPSG:4326"); return [+ll[1].toFixed(7), +ll[0].toFixed(7)];   // [위도, 경도]
     } catch (e) { return null; }
   }
-  function openMapWindow() {
+  function openMapWindow(save) {   // save = 새 창 대신 HTML 파일로 내려받기(2026-10-26)
     var L0 = IL(); if (!L0.length) return msg("칠한(포함한) 필지가 없습니다.");
     var gj = new ol.format.GeoJSON(), proj = map.getView().getProjection();
     var parcels = L0.map(function (p) {
@@ -567,6 +567,12 @@
       "</tbody><tfoot><tr>" + foot.map(function (v, k) { return "<td" + (k >= 3 ? ' class="n"' : "") + ">" + esc(v) + "</td>"; }).join("") + "</tr></tfoot></table>" +
       '<p style="color:#667085">토지이음 정보는 법적 효력이 없는 참고자료입니다. 확대·축소는 왼쪽 위 +/−(0.25단계)·마우스 휠, ⊡ = 필지에 맞추기.</p></div><script>' +
       "(" + eumMapPage.toString().replace(/<\//g, "<\\/") + ")(" + J(D) + ");</scr" + "ipt></body></html>";
+    if (save) {
+      var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+      a.download = (title + " 위치도").replace(/[\\/:*?"<>|]+/g, "_").slice(0, 80) + ".html";
+      document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+      return msg("내려받았습니다: " + a.download + " (브라우저 다운로드 폴더)");
+    }
     var w = window.open(URL.createObjectURL(new Blob([html], { type: "text/html" })), "_blank");
     if (!w) msg("팝업이 막혔습니다. 브라우저 주소창 오른쪽의 팝업 허용을 눌러 주세요.");
   }
@@ -769,6 +775,7 @@
       if (!bl.hidden) { bl.style.left = Math.max(4, Math.min(br.left, innerWidth - 376)) + "px"; var h = bl.offsetHeight; bl.style.top = (br.bottom + 4 + h > innerHeight ? Math.max(4, br.top - 4 - h) : br.bottom + 4) + "px"; }
     }
     if (a === "mapopen") openMapWindow();
+    if (a === "mapsave") openMapWindow(true);
     if (a === "copy") {
       var head = ["번호", "소재지", "지목", "면적(㎡)", "면적(평)", "용도지역", "공시지가(원/㎡)", "공시지가 합계(백만원)", "기준연월", "PNU"], sum = 0, val = 0;
       var rows = IL().map(function (p, i) {
