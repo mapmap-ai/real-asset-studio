@@ -429,7 +429,8 @@
   //   확대·축소는 0.25 단계(+/− 단추, 휠도 잘게), 필지에 맞추기, 지도 크게 보기(전체 화면), 배경 투명도, 필지 색, 번호·지번 이름표, 아래 표·표 복사.
   //   지도 화면 코드는 eumMapPage 함수 그대로 새 문서에 넣는다(문자열로 잇지 않아 고치기 쉽다).
   function eumMapPage(D) {
-    var C = D.color, showNo = true, showJb = true, ft = D.ft == null ? 72 : D.ft;
+    // 번호·지번 이름표는 작업 창의 # · 지번 스위치를 그대로(2026-10-26)
+    var C = D.color, showNo = D.showNo !== false, showJb = D.showJibun !== false, ft = D.ft == null ? 72 : D.ft;
     var crs = new L.Proj.CRS("EPSG:5181", "+proj=tmerc +lat_0=38 +lon_0=127 +k=1 +x_0=200000 +y_0=500000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs",
       { resolutions: [2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5, 0.25], origin: [-30000, -60000],
         bounds: L.bounds([-30000 - Math.pow(2, 19) * 4, -60000], [-30000 + Math.pow(2, 19) * 5, -60000 + Math.pow(2, 19) * 5]) });
@@ -487,6 +488,7 @@
     $("tr").oninput = function () { op = 1 - this.value / 100; $("tro").textContent = this.value + "%"; cur.forEach(function (l) { l.setOpacity(op); }); };
     $("col").value = C; $("col").oninput = function () { C = this.value; draw(); };
     $("ft").value = ft; $("fto").textContent = ft + "%"; $("ft").oninput = function () { ft = +this.value; $("fto").textContent = ft + "%"; draw(); };
+    $("sno").checked = showNo; $("sjb").checked = showJb;
     $("sno").onchange = function () { showNo = this.checked; draw(); };
     $("sjb").onchange = function () { showJb = this.checked; draw(); };
     $("zin").onclick = function () { m.setZoom(m.getZoom() + 0.25); };
@@ -534,7 +536,7 @@
     // 제목: 첫 필지의 동 이름 + 지번(서울특별시 용산구 한강로2가 424번지 → 한강로2가 424)
     var first = (L0[0].address || "").replace(/\s+(산\s*)?\d[\d-]*\s*(번지)?\s*$/, "").trim().split(/\s+/).slice(-1)[0] || "";
     var title = (first ? first + " " : "") + L0[0].jibun + (L0.length > 1 ? " 외 " + (L0.length - 1) + "필지" : "");
-    var D = { parcels: parcels, color: E.color, bg: bgOn("ksky") ? "sky" : bgOn("kmap") ? "map" : bgOn("jijuk") ? "jijuk" : "map", vkey: vworldKey(), ft: E.ft, tsv: tsv };
+    var D = { parcels: parcels, color: E.color, bg: bgOn("ksky") ? "sky" : bgOn("kmap") ? "map" : bgOn("jijuk") ? "jijuk" : "map", vkey: vworldKey(), ft: E.ft, showNo: E.showNo, showJibun: E.showJibun, tsv: tsv };
     var J = function (v) { return JSON.stringify(v).replace(/</g, "\\u003c"); };
     var html = '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' + esc(title) + " 위치도</title>" +
       '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">' +
