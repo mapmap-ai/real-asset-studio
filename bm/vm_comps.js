@@ -57,7 +57,7 @@
     "#vmc .row button.pri{background:#D9653B;border-color:#D9653B;color:#fff;font-weight:700}#vmc .row button:disabled{opacity:.45;cursor:default}" +
     "#vmc .msg{min-height:16px;font-size:12px;color:#b45309;white-space:pre-line}#vmc .sum{font-size:12.5px;background:#FBEFE9;border:1px solid #EDB49C;border-radius:6px;padding:6px 8px}" +
     "#vmc table{border-collapse:collapse;width:100%;font-size:12px}#vmc th,#vmc td{border-bottom:1px solid #eaecf0;padding:4px 5px;text-align:left;white-space:nowrap}" +
-    "#vmc th{background:#f6f7f9;position:sticky;top:0}#vmc td.n,#vmc th.n{text-align:right}#vmc tr.subj td{background:#fff7d6}#vmc tr.out td{color:#98a2b3}#vmc tbody tr{cursor:pointer}#vmc tbody tr.hl td{background:#fff3b0}#vmc tbody tr:hover td{box-shadow:inset 0 -1px 0 #f0d78c}#vmc tfoot td{background:#f6f7f9;font-weight:700}#vmc tfoot tr:nth-child(1) td{border-top:2px solid #d0d5dd}" +
+    "#vmc th{background:#f6f7f9;position:sticky;top:0}#vmc td.n,#vmc th.n{text-align:right}#vmc tr.subj td{background:#fff7d6}#vmc input.sin{width:70px;font:inherit;font-size:12px;padding:1px 4px;border:1px dashed #D9653B;border-radius:4px;background:#fff;text-align:right}#vmc tr.out td{color:#98a2b3}#vmc tbody tr{cursor:pointer}#vmc tbody tr.hl td{background:#fff3b0}#vmc tbody tr:hover td{box-shadow:inset 0 -1px 0 #f0d78c}#vmc tfoot td{background:#f6f7f9;font-weight:700}#vmc tfoot tr:nth-child(1) td{border-top:2px solid #d0d5dd}" +
     "#vmc td.note{white-space:normal;min-width:300px;font-size:11.5px;color:#b45309}#vmc a{color:#D9653B}#vmc .tw{overflow:auto;flex:1 1 auto;min-height:170px;max-height:none;border:1px solid #eaecf0;border-radius:6px}" +
     "#vmc.min .bd{display:none}#vmc .hint{font-size:11.5px;color:#667085}" +
     "#vmc .rz{position:absolute;left:-3px;top:-3px;width:16px;height:16px;cursor:nwse-resize;z-index:3}" +
@@ -887,7 +887,7 @@
   function subjRow(d) {
     var s = d.subject, h = (s.histories || [])[0];
     return { no: "대상", date: h ? h.tradeDate : "-", jibun: short(s.address), road: short(s.roadAddress), typ: h && h.propertyTypeDetail ? h.propertyTypeDetail.label : "",
-      zone: s.zoneLabel || "", price: h ? h.tradePrice : null, land: h ? h.landArea : (s.landM2 || null), bldg: h ? h.buildingTotalArea : (s.bldgM2 || null),
+      zone: s.zoneLabel || "", price: h ? h.tradePrice : null, land: s.userLand || (h && h.landArea) || s.landM2 || null, bldg: s.userBldg || (h && h.buildingTotalArea) || s.bldgM2 || null,
       ptNow: s.ptNow != null ? s.ptNow : (s.propertyTypeLabel || ""), jimok: s.jimok || "", appr: s.approvalDate || "", note: h ? "대상지 가장 최근 거래 내역" : "대상지 거래 이력 없음", pnu: s.pnu, lat: s.lat, lng: s.lng, dist: 0,
       offx: h && offRatio(s, h.tradePrice, h.landArea, h.tradeDate) ? offRatio(s, h.tradePrice, h.landArea, h.tradeDate).x : null,
       offNow: h && offRatio(s, h.tradePrice, h.landArea, h.tradeDate) ? offRatio(s, h.tradePrice, h.landArea, h.tradeDate).now : false, offYm: s.officialNowYm || "" };
@@ -901,7 +901,7 @@
   // 비교사례 적용 시 대상지 추정가격(2026-10-22): 토지단가 × 대상지 대지(평), 연면적단가 × 대상지 연면적(평). 단위 백만원
   //   대상지 면적 = 상세의 '총 대지면적'·'총 연면적'(지금 기준), 없으면 가장 최근 거래의 면적
   function estimate(d, st) {
-    var s = d.subject, h = (s.histories || [])[0] || {}, L2 = s.landM2 || h.landArea, B2 = s.bldgM2 || h.buildingTotalArea;
+    var s = d.subject, h = (s.histories || [])[0] || {}, L2 = s.userLand || s.landM2 || h.landArea, B2 = s.userBldg || s.bldgM2 || h.buildingTotalArea;
     var one = function (u, a) { return u && a ? { avg: u.avg * a * M2P / 100, min: u.min * a * M2P / 100, max: u.max * a * M2P / 100 } : null; };
     // 공시지가대비 기준(2026-10-24 사용자 요청): 대상지 현재 공시지가 × 비교사례 공시지가대비 배수 × 대지면적. 현재 공시지가 = 토지이음 연도별 가장 최근 해(없으면 밸류맵 현재값)
     var offs = (V.rows || []).filter(function (r) { return r.inc && r.offx; }).map(function (r) { return r.offx; });
@@ -970,7 +970,13 @@
       if (subj ? V.hlSubj : r.hl) cls += " hl";
       return '<tr class="' + cls + '"' + (subj ? "" : ' data-i="' + (r.no - 1) + '"') + "><td>" + (subj ? "" : '<span class="gr" title="끌어서 순서 바꾸기">⠿</span>') + esc(c[0]) + "</td><td>" +
         (subj ? "-" : '<input type="checkbox" data-i="' + (r.no - 1) + '"' + (r.inc ? " checked" : "") + ">") +
-        "</td><td>" + esc(c[2]) + "</td><td>" + link(r) + "</td>" + c.slice(4, 16).map(function (v, k) { return "<td" + (k >= 4 && k <= 8 || k >= 10 ? ' class="n"' : "") + ">" + esc(v) + "</td>"; }).join("") +
+        "</td><td>" + esc(c[2]) + "</td><td>" + link(r) + "</td>" + c.slice(4, 16).map(function (v, k) {
+          // 대상지 대지(k=5)·연면적(k=6)을 어디서도 못 찾았으면 직접 넣는 칸(평) — 2026-10-29 사용자 요청. 넣은 값은 ✎ 로 다시 고칠 수 있다
+          if (subj && (k === 5 || k === 6)) {
+            var f = k === 5 ? "land" : "bldg", mine = V.data.subject[k === 5 ? "userLand" : "userBldg"];
+            if (!v || mine) return '<td class="n"><input class="sin" data-f="' + f + '" type="number" min="0" step="0.1" placeholder="평 입력" title="' + (k === 5 ? "대지" : "연면적") + '을(를) 평으로 넣으면 단가·추정가격에 씁니다" value="' + (mine ? +(mine * M2P).toFixed(1) : "") + '"></td>';
+          }
+          return "<td" + (k >= 4 && k <= 8 || k >= 10 ? ' class="n"' : "") + ">" + esc(v) + "</td>"; }).join("") +
         '<td class="note">' + esc(c[16]) + "</td></tr>";
     };
     var tw = $(".tw"); tw.hidden = false;
@@ -982,6 +988,14 @@
       footRows(rows).map(function (c) { return '<tr><td colspan="8">' + esc(c[0]) + "</td>" + c.slice(8, 16).map(function (v) { return '<td class="n">' + esc(v) + "</td>"; }).join("") + "<td></td></tr>"; }).join("") + "</tfoot></table>";
     tw.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
       cb.onchange = function () { V.rows[+cb.dataset.i].inc = cb.checked; save(); render(); };
+    });
+    tw.querySelectorAll("input.sin").forEach(function (x) {
+      x.onclick = function (e) { e.stopPropagation(); };
+      x.onchange = function () {   // 평 → ㎡ 로 담아 둔다. 비우면 직접 넣은 값을 지운다
+        var v = +x.value, k = x.dataset.f === "land" ? "userLand" : "userBldg";
+        if (v > 0) V.data.subject[k] = v / M2P; else delete V.data.subject[k];
+        save(); render(); msg("대상지 " + (k === "userLand" ? "대지" : "연면적") + (v > 0 ? "을(를) " + v + "평으로 넣었습니다 — 추정가격을 다시 계산했습니다." : " 직접 입력을 지웠습니다."));
+      };
     });
     // 줄 누르면 연한 노란색 표시(읽기 편하게, 2026-10-22) — 다시 누르면 지움. 체크 칸·지번 링크·⠿ 를 누를 때는 그대로
     tw.querySelector("tbody").addEventListener("click", function (e) {
