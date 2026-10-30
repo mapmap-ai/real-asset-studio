@@ -34,6 +34,16 @@
   // 지목(2026-10-24 사용자 요청): 필지 상세의 landCategory.label(예 '대'). 값 = 이름 그대로
   var JIMOK = ["대", "전", "답", "과수원", "목장용지", "임야", "광천지", "염전", "공장용지", "학교용지", "주차장", "주유소용지", "창고용지", "도로", "철도용지", "제방",
     "하천", "구거", "유지", "양어장", "수도용지", "공원", "체육용지", "유원지", "종교용지", "사적지", "묘지", "잡종지"].map(function (x) { return [x, x]; });
+  // 지목 이름 맞추기(2026-10-30 안성시 양성면 이현리 251): 밸류맵은 '공장용지'를 '공장'처럼 줄여 쓴다(코드는 표준 그대로, C08 = 대).
+  //   코드가 있으면 표준 순번(01 전 … 28 잡종지)으로, 없으면 줄인 이름에 '용지'·'지'를 붙여 위 목록 이름으로 바꾼다 → '대상지와 같게'·지목 거르기가 맞는다
+  var JM_STD = ["전", "답", "과수원", "목장용지", "임야", "광천지", "염전", "대", "공장용지", "학교용지", "주차장", "주유소용지", "창고용지", "도로", "철도용지", "제방",
+    "하천", "구거", "유지", "양어장", "수도용지", "공원", "체육용지", "유원지", "종교용지", "사적지", "묘지", "잡종지"];
+  function jmName(label, code) {
+    var n = code && +String(code).replace(/\D/g, ""); if (n >= 1 && n <= 28) return JM_STD[n - 1];
+    if (!label) return label || null;
+    var x = String(label).trim(); if (JM_STD.indexOf(x) >= 0) return x;
+    return JM_STD.indexOf(x + "용지") >= 0 ? x + "용지" : JM_STD.indexOf(x + "지") >= 0 ? x + "지" : x;
+  }
   // 유형별 세부 유형 = 거래 한 건의 propertyTypeDetail.label(밸류맵 거래 270건에서 확인한 값 + 건축물 용도에서 흔한 것). 값은 '유형:세부'(기타가 두 유형에 있음)
   //   2026-10-24 사용자 요청: 상업업무는 근린·업무·판매·숙박·기타만, 상가는 세부 유형 없음(다섯을 다 고르면 교육·의료 등 드문 것도 그대로 들어온다)
   var SUBS = { BUILDING: ["근린", "업무", "판매", "숙박", "기타"], HOUSING: ["단독", "다가구"],
@@ -622,7 +632,7 @@
       pnu: pnu, address: g(/"address":"([^"]*)","shortAddress"/), roadAddress: g(/"roadAddress":"([^"]*)"/),
       zoneCode: zone ? zone[1] : null, zoneLabel: zone ? zone[2] : null,
       propertyTypeCode: ptype ? ptype[1] : null, propertyTypeLabel: ptype ? ptype[2] : null,
-      jimok: (t.match(/"landCategory":\{"code":"[^"]*","label":"([^"]*)"/) || [])[1] || null,
+      jimok: (function (m) { return m ? jmName(m[2], m[1]) : null; })(t.match(/"landCategory":\{"code":"([^"]*)","label":"([^"]*)"/)),
       approvalDate: attr["사용승인일"] || null, landM2: m2(attr["총 대지면적"]), bldgM2: m2(attr["총 연면적"]), lands: (lands || []).map(function (l) { return l.address; }),
       officialNow: offNow ? +offNow[1] : null, officialNowYm: offYm ? "20" + offYm[1] + "." + offYm[2] : null,
       histories: hist ? hist.contents : [], historiesHasNext: hist ? hist.hasNext : null, ok: !!summ
@@ -850,7 +860,7 @@
         //   'YYYY년 다가구 xx억원 매입 후 용도변경(신축)하여 YYYY년 근린 xx억원 매각', 앞 거래가 빠졌으면 'YYYY년 다가구 xx억원 거래 후 용도변경하여 매각'
         if (!typeOk(t)) return;
         var ct0 = catOf(t); if (ct0 && c.dtSel && c.dtSel[ct0] && c.dtSel[ct0].indexOf(t.propertyTypeDetail ? t.propertyTypeDetail.label : "") < 0) return;   // 고른 세부 유형이 아님
-        if ((c.jmList || []).length && lot.jimok && c.jmList.indexOf(lot.jimok) < 0) return;   // 고른 지목이 아님(지목을 모르면 남긴다)
+        if ((c.jmList || []).length && lot.jimok && c.jmList.map(function (z) { return jmName(z); }).indexOf(jmName(lot.jimok)) < 0) return;   // 고른 지목이 아님(지목을 모르면 남긴다)
         var next = convNext(lot, t);
         var typ = t.propertyTypeDetail ? t.propertyTypeDetail.label : "", inc = true, notes = [];
         if (newer) {
@@ -872,7 +882,7 @@
         var ofr = offRatio(lot, t.tradePrice, t.landArea, t.tradeDate);
         rows.push({ key: key, offx: ofr ? ofr.x : null, offNow: ofr ? ofr.now : false, offYm: ofr && ofr.now ? lot.officialNowYm : "",
           date: t.tradeDate, jibun: short(lot.address) + (nl > 1 ? " 외 " + (nl - 1) + "필지" : ""), road: short(lot.roadAddress),
-          typ: typ, ptNow: lot.ptNow != null ? lot.ptNow : (lot.propertyTypeLabel || ""), jimok: lot.jimok || "", zone: lot.zoneLabel || "", scale: lot.scale || "", price: t.tradePrice, land: t.landArea, bldg: t.buildingTotalArea,
+          typ: typ, ptNow: lot.ptNow != null ? lot.ptNow : (lot.propertyTypeLabel || ""), jimok: jmName(lot.jimok) || "", zone: lot.zoneLabel || "", scale: lot.scale || "", price: t.tradePrice, land: t.landArea, bldg: t.buildingTotalArea,
           appr: lot.approvalDate || "", inc: inc, note: notes.join("; "), pnu: lot.pnu, lat: lot.lat, lng: lot.lng,
           dist: lot.distKm });
       });
@@ -894,7 +904,7 @@
     var s = d.subject, h = (s.histories || [])[0];
     return { no: "대상", date: h ? h.tradeDate : "-", jibun: short(s.address), road: short(s.roadAddress), typ: h && h.propertyTypeDetail ? h.propertyTypeDetail.label : "",
       zone: s.zoneLabel || "", price: h ? h.tradePrice : null, land: s.userLand || (h && h.landArea) || s.landM2 || null, bldg: s.userBldg || (h && h.buildingTotalArea) || s.bldgM2 || null,
-      ptNow: s.ptNow != null ? s.ptNow : (s.propertyTypeLabel || ""), jimok: s.jimok || "", scale: s.scale || "", appr: s.approvalDate || "", note: h ? "대상지 가장 최근 거래 내역" : "대상지 거래 이력 없음", pnu: s.pnu, lat: s.lat, lng: s.lng, dist: 0,
+      ptNow: s.ptNow != null ? s.ptNow : (s.propertyTypeLabel || ""), jimok: jmName(s.jimok) || "", scale: s.scale || "", appr: s.approvalDate || "", note: h ? "대상지 가장 최근 거래 내역" : "대상지 거래 이력 없음", pnu: s.pnu, lat: s.lat, lng: s.lng, dist: 0,
       offx: h && offRatio(s, h.tradePrice, h.landArea, h.tradeDate) ? offRatio(s, h.tradePrice, h.landArea, h.tradeDate).x : null,
       offNow: h && offRatio(s, h.tradePrice, h.landArea, h.tradeDate) ? offRatio(s, h.tradePrice, h.landArea, h.tradeDate).now : false, offYm: s.officialNowYm || "" };
   }
