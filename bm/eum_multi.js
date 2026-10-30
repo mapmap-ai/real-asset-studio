@@ -469,29 +469,68 @@
         bounds: L.bounds([-30000 - Math.pow(2, 19) * 4, -60000], [-30000 + Math.pow(2, 19) * 5, -60000 + Math.pow(2, 19) * 5]) });
     var K = function (u) { return L.tileLayer(u, { minZoom: 0, maxZoom: 13, maxNativeZoom: 13, zoomReverse: true, zoomOffset: 1, tms: true, continuousWorld: true, attribution: "지도 &copy; Kakao · 경계 토지이음" }); };
     var T = "https://mts.kakaocdn.net/api/v1/tile/";
-    var B = { map: [K(T + "PNG02/v26_blse3/latest/{z}/{y}/{x}.png")],
-      sky: [K("https://map.kakaocdn.net/map_skyview_hd/L{z}/{y}/{x}.jpg?v=160107"), K(T + "PNG_SKYH02/v24_kikr3/latest/{z}/{y}/{x}.png")],
-      cad: [K(T + "PNG02/v26_blse3/latest/{z}/{y}/{x}.png"), K(T + "PNG_CAD02/v22_53657/latest/{z}/{y}/{x}.png")], none: [],
-      jijuk: [] };
-    // 지적도(백지도, 2026-10-23): 브이월드 연속지적도 WMS. 키는 코드에 넣지 않는다(사용자 결정 '(나)') — 처음 고를 때 한 번 붙여 넣으면
-    //   이 브라우저(토지이음 쪽 저장소 vworldKey)에만 남는다. 지도 좌표계(EPSG:5181) 그대로 bbox 를 보내고, 주황 선·파란 지번을 흑백으로 눌러 백지도처럼
+    // 배경 겹치기(2026-10-30 사용자 요청): 작업 창과 같은 네 가지를 함께 켜고 저마다 투명도(0% = 진하게). 아래 → 위 순서로 쌓는다.
+    //   처음 상태 = 작업 창의 배경 설정(D.bgs 복사본). 이 창에서 바꿔도 작업 창(토지이음 쪽 저장소)에는 돌려보내지 않는다
+    var BG = [{ k: "ksky", name: "카카오 위성" }, { k: "kmap", name: "카카오 지도" }, { k: "eum", name: "토지이음 도면" }, { k: "jijuk", name: "지적도(백지도)" }];
+    var bgs = D.bgs || { on: { kmap: true }, t: {} }; bgs.on = bgs.on || {}; bgs.t = bgs.t || {};
+    // 토지이음 조각(EPSG:5179, 256px, 원점 90000,1100000 왼쪽 아래, 단계 z 의 1px = 4096/2^z m — 2026-10-30 확인)을 카카오 좌표계(EPSG:5181) 조각 칸에 옮겨 그린다.
+    //   두 좌표계는 거의 평행이동·살짝 회전 관계라 조각 칸 하나 안에서는 1차 변환(setTransform)으로 충분하다. 토지이음 조각은 출처를 묻지 않아 저장한 HTML 에서도 나온다
+    proj4.defs("EPSG:5179", "+proj=tmerc +lat_0=38 +lon_0=127.5 +k=0.9996 +x_0=1000000 +y_0=2000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
+    var EumGrid = L.GridLayer.extend({
+      createTile: function (c, done) {
+        var ts = this.getTileSize(), W = ts.x * 2, H = ts.y * 2, cv = document.createElement("canvas"), mp = this._map, tpl = this.options.tpl;
+        cv.width = W; cv.height = H; var ctx = cv.getContext("2d");
+        var to = function (px, py) { var ll = mp.unproject(L.point(c.x * ts.x + px, c.y * ts.y + py), c.z); return proj4("EPSG:4326", "EPSG:5179", [ll.lng, ll.lat]); };
+        var nw = to(0, 0), ne = to(ts.x, 0), sw = to(0, ts.y), se = to(ts.x, ts.y);
+        var ax = (ne[0] - nw[0]) / W, ay = (ne[1] - nw[1]) / W, bx = (sw[0] - nw[0]) / H, by = (sw[1] - nw[1]) / H, det = ax * by - bx * ay;
+        var inv = function (dx, dy) { return [(by * dx - bx * dy) / det, (-ay * dx + ax * dy) / det]; };   // 5179 거리 → 이 칸의 픽셀
+        var z = Math.max(0, Math.min(15, Math.round(Math.log(4096 / Math.sqrt(ax * ax + ay * ay)) / Math.LN2))), span = 256 * 4096 / Math.pow(2, z);
+        var xs = [nw[0], ne[0], sw[0], se[0]], ys = [nw[1], ne[1], sw[1], se[1]];
+        var x0 = Math.floor((Math.min.apply(0, xs) - 90000) / span), x1 = Math.floor((Math.max.apply(0, xs) - 90000) / span);
+        var y0 = Math.floor((Math.min.apply(0, ys) - 1100000) / span), y1 = Math.floor((Math.max.apply(0, ys) - 1100000) / span);
+        var left = (x1 - x0 + 1) * (y1 - y0 + 1), fin = function () { if (--left <= 0) done(null, cv); };
+        if (left > 64) { setTimeout(function () { done(null, cv); }, 0); return cv; }
+        var one = function (tx, ty) {
+          var im = new Image();
+          im.onload = function () {
+            var o = inv(90000 + tx * span - nw[0], 1100000 + (ty + 1) * span - nw[1]), ci = inv(span / 256, 0), cj = inv(0, -span / 256);
+            ctx.setTransform(ci[0], ci[1], cj[0], cj[1], o[0], o[1]); ctx.drawImage(im, -0.3, -0.3, 256.6, 256.6); fin();   // 조각 사이 실금이 안 보이게 살짝 겹친다
+          };
+          im.onerror = fin; im.src = tpl.replace("{z}", z).replace("{x}", tx).replace("{y}", ty);
+        };
+        for (var tx = x0; tx <= x1; tx++) for (var ty = y0; ty <= y1; ty++) one(tx, ty);
+        return cv;
+      }
+    });
+    var eumL = function (t, gray) {
+      var l = new EumGrid({ tpl: D.eum.tpl.replace("{t}", t), minZoom: 0, maxZoom: 13, attribution: "도면 &copy; 토지이음" });
+      if (gray) l.on("add", function () { var c = l.getContainer(); if (c) c.style.filter = "grayscale(1) brightness(1.18) contrast(1.35)"; });   // 작업 창 지적도와 같은 흑백
+      return l;
+    };
+    // 토지이음 조각 주소를 못 받았으면 지적도만 브이월드 연속지적도 WMS 로 대신한다(EPSG:5181 bbox 그대로, 흑백)
     function jjLayer() {
       var l = L.tileLayer.wms("https://api.vworld.kr/req/wms", { layers: "lp_pa_cbnd_bubun,lp_pa_cbnd_bonbun", styles: "lp_pa_cbnd_bubun,lp_pa_cbnd_bonbun",
         format: "image/png", transparent: true, version: "1.3.0", tileSize: 512, maxZoom: 13, KEY: D.vkey, DOMAIN: "www.eum.go.kr", attribution: "연속지적도 &copy; 브이월드" });
       l.on("add", function () { var c = l.getContainer(); if (c) c.style.filter = "grayscale(1) contrast(2)"; });
       return l;
     }
-    function needKey() {
-      if (D.vkey) return true;
-      var k = (prompt("지적도(백지도)는 브이월드 인증키가 있어야 나옵니다.\n받은 인증키를 붙여 넣으세요(이 브라우저에만 저장됩니다).") || "").trim();
-      if (!/^[0-9A-Fa-f-]{20,}$/.test(k)) { if (k) alert("인증키 모양이 아닙니다(예: 8자리-4자리-4자리-4자리-12자리)."); return false; }
-      D.vkey = k; try { localStorage.setItem("vworldKey", k); } catch (e) {}
-      return true;
+    var LY = { ksky: [K("https://map.kakaocdn.net/map_skyview_hd/L{z}/{y}/{x}.jpg?v=160107"), K(T + "PNG_SKYH02/v24_kikr3/latest/{z}/{y}/{x}.png")],
+      kmap: [K(T + "PNG02/v26_blse3/latest/{z}/{y}/{x}.png")],
+      eum: D.eum ? [eumL(D.eum.t)] : [], jijuk: D.eum ? [eumL("tile7", true)] : D.vkey ? [jjLayer()] : [] };
+    var m = L.map("map", { crs: crs, zoomSnap: 0.25, zoomDelta: 0.25, wheelPxPerZoomLevel: 180, zoomControl: false });
+    function applyBg() {
+      var zi = 1, on = [];
+      BG.forEach(function (b) {
+        var ok = !!bgs.on[b.k] && LY[b.k].length > 0; if (ok) on.unshift(b.name + (bgs.t[b.k] ? " " + bgs.t[b.k] + "%" : ""));
+        LY[b.k].forEach(function (l) {
+          if (ok) { if (!m.hasLayer(l)) l.addTo(m); l.setZIndex(zi); l.setOpacity(1 - (bgs.t[b.k] || 0) / 100); } else if (m.hasLayer(l)) m.removeLayer(l);
+          zi++;
+        });
+        var cb = document.querySelector('[data-bk="' + b.k + '"]'), r = document.querySelector('[data-bt="' + b.k + '"]'), o = document.querySelector('[data-bo="' + b.k + '"]');
+        if (cb) { cb.checked = !!bgs.on[b.k]; cb.disabled = !LY[b.k].length; } if (r) { r.value = bgs.t[b.k] || 0; r.disabled = !ok; } if (o) o.textContent = (bgs.t[b.k] || 0) + "%";
+      });
+      var bb = document.getElementById("bgb"); if (bb) bb.textContent = "배경: " + (on.length ? on.join(" + ") : "없음(흰 바탕)") + " ▾";
     }
-    var m = L.map("map", { crs: crs, zoomSnap: 0.25, zoomDelta: 0.25, wheelPxPerZoomLevel: 180, zoomControl: false }), cur = [], op = 1;
-    function base(k) {
-      if (k === "jijuk") { if (!needKey()) return false; if (!B.jijuk.length) B.jijuk = [jjLayer()]; }
-      cur.forEach(function (l) { m.removeLayer(l); }); cur = B[k]; cur.forEach(function (l, i) { l.addTo(m); l.setZIndex(i + 1); l.setOpacity(op); }); return true; }
     var g = L.layerGroup().addTo(m), shapes = [];
     var dark = function (hex) { var n = parseInt(String(hex).slice(1), 16); if (isNaN(n)) return "#1d2433"; return "rgb(" + [n >> 16 & 255, n >> 8 & 255, n & 255].map(function (v) { return Math.round(v * .45); }).join(",") + ")"; };
     function draw() {
@@ -510,15 +549,14 @@
       document.querySelectorAll("td.no span").forEach(function (s, i) { s.style.background = (D.parcels[i] && D.parcels[i].color) || C; });
     }
     function fit() { var b = L.featureGroup(shapes).getBounds(); if (b.isValid()) m.fitBounds(b, { padding: [40, 40] }); else m.setView([37.5665, 126.978], 7); }
-    if (!D.vkey) { var oj = document.querySelector('#bg option[value="jijuk"]'); if (oj) oj.textContent = "지적도(백지도) — 키 필요"; if (D.bg === "jijuk") D.bg = "none"; }
-    base(D.bg || "map"); draw(); fit();
     var $ = function (id) { return document.getElementById(id); };
-    var bgNow = D.bg || "map";
-    $("bg").value = bgNow; $("bg").onchange = function () {   // 키를 안 넣으면 고르기 전 배경으로 되돌린다
-      if (base(this.value) === false) { this.value = bgNow; return; }
-      bgNow = this.value; var oj = document.querySelector('#bg option[value="jijuk"]'); if (oj && D.vkey) oj.textContent = "지적도(백지도)";
-    };
-    $("tr").oninput = function () { op = 1 - this.value / 100; $("tro").textContent = this.value + "%"; cur.forEach(function (l) { l.setOpacity(op); }); };
+    $("bgl").innerHTML = "<table>" + BG.slice().reverse().map(function (b) {   // 위에 그려지는 것부터
+      return '<tr><td><label><input type="checkbox" data-bk="' + b.k + '"> ' + b.name + '</label></td><td>투명도</td><td><input type="range" data-bt="' + b.k + '" min="0" max="100" step="5" value="0"></td><td><output data-bo="' + b.k + '">0%</output></td></tr>';
+    }).join("") + '</table><div class="bgn">위에 있는 것이 위에 그려집니다. 0% = 진하게, 숫자가 클수록 흐리게.</div>';
+    document.querySelectorAll("[data-bk]").forEach(function (c) { c.onchange = function () { bgs.on[c.dataset.bk] = c.checked; applyBg(); }; });
+    document.querySelectorAll("[data-bt]").forEach(function (r) { r.oninput = function () { bgs.t[r.dataset.bt] = +r.value; applyBg(); }; });
+    $("bgb").onclick = function () { $("bgl").hidden = !$("bgl").hidden; };
+    applyBg(); draw(); fit();
     $("col").value = C; $("col").oninput = function () { C = this.value; draw(); };
     $("ft").value = ft; $("fto").textContent = ft + "%"; $("ft").oninput = function () { ft = +this.value; $("fto").textContent = ft + "%"; draw(); };
     $("sno").checked = showNo; $("sjb").checked = showJb;
@@ -554,6 +592,15 @@
       var ll = ol.proj.transform([pt[0], pt[1]], proj, "EPSG:4326"); return [+ll[1].toFixed(7), +ll[0].toFixed(7)];   // [위도, 경도]
     } catch (e) { return null; }
   }
+  // 토지이음 조각 주소 틀(지도 열기 창 배경용, 2026-10-30): 토지이음 층의 주소 함수에 표시용 좌표를 넣어 받아 {t}/{z}/{x}_{y} 로 바꾼다.
+  //   OL 단계 19 = 주소 단계 14. t = 지금 토지이음이 보여 주는 도면 번호(tile1 등) — 지적도는 tile7
+  function eumTpl() {
+    try {
+      var l = eumTiles()[0], es = l && l.getSource(), fn = es && es.getTileUrlFunction();
+      var u = fn ? String(fn.call(es, [19, 11111, 22222], 1, map.getView().getProjection()) || "") : "", t = (u.match(/\/(tile\d+)\/14\/11111_22222\./) || [])[1];
+      return t ? { tpl: u.replace(/\/tile\d+\/14\/11111_22222\./, "/{t}/{z}/{x}_{y}."), t: t } : null;
+    } catch (e) { return null; }
+  }
   function openMapWindow(save) {   // save = 새 창 대신 HTML 파일로 내려받기(2026-10-26)
     var L0 = IL(); if (!L0.length) return msg("칠한(포함한) 필지가 없습니다.");
     var gj = new ol.format.GeoJSON(), proj = map.getView().getProjection();
@@ -569,7 +616,7 @@
     // 제목: 첫 필지의 동 이름 + 지번(서울특별시 용산구 한강로2가 424번지 → 한강로2가 424)
     var first = (L0[0].address || "").replace(/\s+(산\s*)?\d[\d-]*\s*(번지)?\s*$/, "").trim().split(/\s+/).slice(-1)[0] || "";
     var title = (first ? first + " " : "") + L0[0].jibun + (L0.length > 1 ? " 외 " + (L0.length - 1) + "필지" : "");
-    var D = { parcels: parcels, color: E.color, bg: bgOn("ksky") ? "sky" : bgOn("kmap") ? "map" : bgOn("jijuk") ? "jijuk" : "map", vkey: vworldKey(), ft: E.ft, showNo: E.showNo, showJibun: E.showJibun, tsv: tsv };
+    var D = { parcels: parcels, color: E.color, bgs: JSON.parse(JSON.stringify(E.bgs)), eum: eumTpl(), vkey: vworldKey(), ft: E.ft, showNo: E.showNo, showJibun: E.showJibun, tsv: tsv };
     var J = function (v) { return JSON.stringify(v).replace(/</g, "\\u003c"); };
     var html = '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' + esc(title) + " 위치도</title>" +
       '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">' +
@@ -580,6 +627,7 @@
       "#mapbox{position:relative;height:66vh;background:#fff}#mapbox.big{position:fixed;inset:0;height:auto;z-index:9999}#mapbox:fullscreen{height:100vh}#map{position:absolute;inset:0;background:#fff}" +
       ".lay{position:absolute;z-index:1000;top:10px;right:10px;display:flex;flex-direction:column;gap:6px;align-items:flex-end}.lay>div{background:#fff;border-radius:6px;padding:4px 7px;box-shadow:0 1px 4px rgba(0,0,0,.3);display:flex;align-items:center;gap:6px}" +
       ".lay select,.lay button{font:inherit;font-size:12.5px}.lay button{border:1px solid #d0d5dd;background:#fff;border-radius:5px;padding:2px 8px;cursor:pointer}.lay button:hover{background:#f2f4f7}" +
+      ".lay>div.bgw{flex-direction:column;align-items:stretch}#bgb{text-align:left}#bgl table{width:auto;background:none;font-size:12.5px}#bgl td{border:0;padding:1px 4px}#bgl output{display:inline-block;min-width:34px;text-align:right}.bgn{color:#667085;font-size:11.5px;padding:2px 4px}" +
       ".lay input[type=range]{width:100px;accent-color:#D9653B}.lay input[type=color]{width:26px;height:22px;padding:0;border:1px solid #d0d5dd;border-radius:4px}" +
       ".zm{position:absolute;z-index:1000;left:10px;top:10px;display:flex;flex-direction:column;background:#fff;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.3);overflow:hidden}" +
       ".zm button{border:0;border-bottom:1px solid #eaecf0;background:#fff;width:34px;height:30px;font-size:17px;cursor:pointer}.zm button:hover{background:#fff1ea}.zm span{font-size:10.5px;color:#667085;text-align:center;padding:2px 0}" +
@@ -589,11 +637,10 @@
       "td.no span{display:inline-block;min-width:20px;height:20px;line-height:20px;border-radius:10px;color:#fff;text-align:center;font-size:11px;font-weight:700}tfoot td{font-weight:700;background:#f6f7f9}</style></head><body>" +
       '<header><h1 contenteditable="true" spellcheck="false" title="눌러서 고칠 수 있음">' + esc(title) + " 위치도</h1>" +
       '<div class="kpi"><span>' + L0.length + "필지</span><span>면적 합계 <b>" + fmt(sum) + "㎡</b> (" + fmt(sum * 0.3025) + "평)</span>" +
-      (val ? "<span>공시지가 합계 <b>" + fmt(val / 1e6) + " 백만원</b></span>" : "") + "<span>경계: 토지이음 · 배경: 카카오맵</span></div></header>" +
+      (val ? "<span>공시지가 합계 <b>" + fmt(val / 1e6) + " 백만원</b></span>" : "") + "<span>경계: 토지이음 · 배경: 카카오맵·토지이음</span></div></header>" +
       '<div id="mapbox"><div id="map"></div>' +
       '<div class="zm"><button id="zin" title="확대(0.25단계)">+</button><button id="zout" title="축소(0.25단계)">−</button><button id="zfit" title="필지에 맞추기" style="font-size:13px">⊡</button><span id="zl"></span></div>' +
-      '<div class="lay"><div>배경 <select id="bg"><option value="map">카카오 지도</option><option value="sky">카카오 위성</option><option value="cad">지적편집도</option><option value="jijuk">지적도(백지도)</option><option value="none">흰 바탕</option></select></div>' +
-      '<div>배경 투명도 <input id="tr" type="range" min="0" max="90" step="5" value="0"><span id="tro">0%</span></div>' +
+      '<div class="lay"><div class="bgw"><button id="bgb" type="button" title="배경을 여러 개 겹치고 저마다 투명도를 정합니다">배경</button><div id="bgl" hidden></div></div>' +
       '<div title="0% = 진하게 칠함, 100% = 테두리만">칠 투명도 <input id="ft" type="range" min="0" max="100" step="5"><span id="fto"></span></div>' +
       '<div>필지 색 <input id="col" type="color"> <label><input id="sno" type="checkbox" checked>번호</label> <label><input id="sjb" type="checkbox" checked>지번</label></div>' +
       '<div><button id="fs">⛶ 지도 크게 보기</button></div></div></div>' +
