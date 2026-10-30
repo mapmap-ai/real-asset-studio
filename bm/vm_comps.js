@@ -578,6 +578,11 @@
     if (/창고/.test(a)) return "창고";
     return a.replace(/시설$/, "") || "기타";
   }
+  // 규모(2026-10-30 사용자 요청): B1~15F, 지하가 없으면 1~15F(1층이면 1F). 지금 건물 기준(거래 당시가 아닐 수 있음)
+  function scaleText(b, more) {
+    var f = +b.floorCount || 0, u = +b.basementCount || 0; if (!f && !u) return "";
+    return (u ? "B" + u + "~" + f + "F" : f > 1 ? "1~" + f + "F" : f + "F") + (more ? " 외 " + more + "동" : "");
+  }
   async function landsInfo(pnu) {
     try {
       var r = await fetch("/properties/lands/" + pnu); if (!r.ok) return null;
@@ -589,7 +594,8 @@
       var main = bs.filter(function (b) { return b.attachedType && b.attachedType.code === "C0"; }); if (!main.length) main = bs;
       var m0 = main.slice().sort(function (a, b) { return (b.buildingTotalArea || 0) - (a.buildingTotalArea || 0); })[0];
       return { land: land, bldg: bs.reduce(function (a, b) { return a + (+b.buildingTotalArea || 0); }, 0) || null,
-        appr: m0 && m0.usingApprovalDate ? m0.usingApprovalDate.replace(/-/g, ".") : null, ptNow: m0 ? purposeShort(m0) : (bs.length ? "" : "토지"), name: m0 ? m0.buildingName || "" : "" };
+        appr: m0 && m0.usingApprovalDate ? m0.usingApprovalDate.replace(/-/g, ".") : null, ptNow: m0 ? purposeShort(m0) : (bs.length ? "" : "토지"), name: m0 ? m0.buildingName || "" : "",
+        scale: m0 ? scaleText(m0, main.length - 1) : "" };
     } catch (e) { return null; }
   }
   async function parseDetail(pnu) {
@@ -662,7 +668,7 @@
     var lat0 = S.latitude, lng0 = S.longitude, subjectPnu = S.pnu;
     msg("대상지 확인 중… " + S.address);
     var subject = await parseDetail(subjectPnu), sli = await landsInfo(subjectPnu);
-    if (sli) subject.ptNow = sli.ptNow;
+    if (sli) { subject.ptNow = sli.ptNow; subject.scale = sli.scale || ""; }
     if (!subject.address) subject.address = S.address; if (!subject.roadAddress) subject.roadAddress = S.roadAddress || "";
     if (!subject.zoneCode || !subject.jimok || !CODE2PT[subject.propertyTypeCode]) {   // 밸류맵 상세에 없으면 브이월드 토지특성으로 채운다
       var vl = await vwLand(subjectPnu);
@@ -780,7 +786,7 @@
       msg("거래내역 읽는 중… " + Math.min(s + 4, pnus.length) + " / " + pnus.length + " 필지");
       var part = await Promise.all(pnus.slice(s, s + 4).map(async function (pn) {
         var two = await Promise.all([parseDetail(pn), landsInfo(pn)]), l = two[0];
-        if (two[1]) l.ptNow = two[1].ptNow;   // 현재 유형(건축물대장 주용도 세부)
+        if (two[1]) { l.ptNow = two[1].ptNow; l.scale = two[1].scale || ""; }   // 현재 유형(건축물대장 주용도 세부)·규모
         l.official = await officialPrices(pn); return l; }));
       part.forEach(function (l) { var m = byPnu[l.pnu]; Object.assign(l, { lat: m.latitude, lng: m.longitude, distKm: m.distKm }); lots.push(l); });
       await sleep(150);
@@ -866,7 +872,7 @@
         var ofr = offRatio(lot, t.tradePrice, t.landArea, t.tradeDate);
         rows.push({ key: key, offx: ofr ? ofr.x : null, offNow: ofr ? ofr.now : false, offYm: ofr && ofr.now ? lot.officialNowYm : "",
           date: t.tradeDate, jibun: short(lot.address) + (nl > 1 ? " 외 " + (nl - 1) + "필지" : ""), road: short(lot.roadAddress),
-          typ: typ, ptNow: lot.ptNow != null ? lot.ptNow : (lot.propertyTypeLabel || ""), jimok: lot.jimok || "", zone: lot.zoneLabel || "", price: t.tradePrice, land: t.landArea, bldg: t.buildingTotalArea,
+          typ: typ, ptNow: lot.ptNow != null ? lot.ptNow : (lot.propertyTypeLabel || ""), jimok: lot.jimok || "", zone: lot.zoneLabel || "", scale: lot.scale || "", price: t.tradePrice, land: t.landArea, bldg: t.buildingTotalArea,
           appr: lot.approvalDate || "", inc: inc, note: notes.join("; "), pnu: lot.pnu, lat: lot.lat, lng: lot.lng,
           dist: lot.distKm });
       });
@@ -888,7 +894,7 @@
     var s = d.subject, h = (s.histories || [])[0];
     return { no: "대상", date: h ? h.tradeDate : "-", jibun: short(s.address), road: short(s.roadAddress), typ: h && h.propertyTypeDetail ? h.propertyTypeDetail.label : "",
       zone: s.zoneLabel || "", price: h ? h.tradePrice : null, land: s.userLand || (h && h.landArea) || s.landM2 || null, bldg: s.userBldg || (h && h.buildingTotalArea) || s.bldgM2 || null,
-      ptNow: s.ptNow != null ? s.ptNow : (s.propertyTypeLabel || ""), jimok: s.jimok || "", appr: s.approvalDate || "", note: h ? "대상지 가장 최근 거래 내역" : "대상지 거래 이력 없음", pnu: s.pnu, lat: s.lat, lng: s.lng, dist: 0,
+      ptNow: s.ptNow != null ? s.ptNow : (s.propertyTypeLabel || ""), jimok: s.jimok || "", scale: s.scale || "", appr: s.approvalDate || "", note: h ? "대상지 가장 최근 거래 내역" : "대상지 거래 이력 없음", pnu: s.pnu, lat: s.lat, lng: s.lng, dist: 0,
       offx: h && offRatio(s, h.tradePrice, h.landArea, h.tradeDate) ? offRatio(s, h.tradePrice, h.landArea, h.tradeDate).x : null,
       offNow: h && offRatio(s, h.tradePrice, h.landArea, h.tradeDate) ? offRatio(s, h.tradePrice, h.landArea, h.tradeDate).now : false, offYm: s.officialNowYm || "" };
   }
@@ -922,20 +928,20 @@
     return (c.radiusKm ? "대상지 반경 " + c.radiusKm + "km" : d.regionName ? d.regionName : "같은 법정동") + " · " + (c.dtSel && Object.keys(c.dtSel).length ? Object.keys(c.dtSel).map(function (k) { return typeLabel(k) + "(" + c.dtSel[k].join("·") + ")"; }).join("·") + " · " : "") + ((c.jmList || []).length ? "지목 " + c.jmList.join("·") + " · " : "") + (c.useDistrictsLabel || (c.ptList ? "용도지역 전체" : z || "용도지역 전체")) + " · " + c.typeLabel + " · " + c.years[0] + "~" + c.years[c.years.length - 1] + " 실거래";
   }
 
-  var HEAD = ["No", "포함", "거래일", "지번", "거래시 유형", "현재 유형", "지목", "용도지역", "실거래가(억원)", "대지(평)", "연면적(평)", "토지단가(만원/평)", "연면적단가(만원/평)", "사용승인일", "공시지가대비", "거리(km)", "비고"];
+  var HEAD = ["No", "포함", "거래일", "지번", "거래시 유형", "현재 유형", "지목", "용도지역", "규모", "실거래가(억원)", "대지(평)", "연면적(평)", "토지단가(만원/평)", "연면적단가(만원/평)", "사용승인일", "공시지가대비", "거리(km)", "비고"];
   // 정렬할 수 있는 열(HEAD 순번 → 값). 같은 열을 다시 누르면 오름차순 ↔ 내림차순
-  var SORT = { 1: function (r) { return r.inc ? 1 : 0; }, 2: function (r) { return r.date; }, 8: function (r) { return r.price; }, 9: function (r) { return r.land; }, 10: function (r) { return r.bldg; },
-    11: function (r) { return unitLand(r); }, 12: function (r) { return unitBldg(r); }, 13: function (r) { return (r.appr || "").replace(/\D/g, ""); },
-    14: function (r) { return r.offx; }, 15: function (r) { return r.dist; } };
+  var SORT = { 1: function (r) { return r.inc ? 1 : 0; }, 2: function (r) { return r.date; }, 9: function (r) { return r.price; }, 10: function (r) { return r.land; }, 11: function (r) { return r.bldg; },
+    12: function (r) { return unitLand(r); }, 13: function (r) { return unitBldg(r); }, 14: function (r) { return (r.appr || "").replace(/\D/g, ""); },
+    15: function (r) { return r.offx; }, 16: function (r) { return r.dist; } };
   function cells(r) {
-    return [r.no === "대상" ? r.no : (r.inc ? r.dno || "" : "–"), r.no === "대상" ? "-" : (r.inc ? "Y" : "N"), r.date, r.jibun, r.typ, r.ptNow || "", r.jimok || "", r.zone, r.price ? fmt(r.price / 1e8, 2) : "",
+    return [r.no === "대상" ? r.no : (r.inc ? r.dno || "" : "–"), r.no === "대상" ? "-" : (r.inc ? "Y" : "N"), r.date, r.jibun, r.typ, r.ptNow || "", r.jimok || "", r.zone, r.scale || "", r.price ? fmt(r.price / 1e8, 2) : "",
       r.land ? fmt(r.land * M2P, 1) : "", r.bldg ? fmt(r.bldg * M2P, 1) : "", fmt(unitLand(r)), fmt(unitBldg(r)), r.appr,
       r.offx ? "x" + fmt(r.offx, 1) : "", r.dist != null ? fmt(r.dist, 2) : "", r.note];
   }
 
   // 표 맨 아래 평균·최대·최소(2026-10-22): 포함(Y)한 거래만, 값이 숫자인 열만(실거래가·대지·연면적·토지단가·연면적단가·공시지가대비·거리)
-  var FOOTV = { 8: [function (r) { return r.price ? r.price / 1e8 : null; }, 2], 9: [function (r) { return r.land ? r.land * M2P : null; }, 1], 10: [function (r) { return r.bldg ? r.bldg * M2P : null; }, 1],
-    11: [unitLand, 0], 12: [unitBldg, 0], 14: [function (r) { return r.offx; }, 1, "x"], 15: [function (r) { return r.dist; }, 2] };
+  var FOOTV = { 9: [function (r) { return r.price ? r.price / 1e8 : null; }, 2], 10: [function (r) { return r.land ? r.land * M2P : null; }, 1], 11: [function (r) { return r.bldg ? r.bldg * M2P : null; }, 1],
+    12: [unitLand, 0], 13: [unitBldg, 0], 15: [function (r) { return r.offx; }, 1, "x"], 16: [function (r) { return r.dist; }, 2] };
   function footRows(rows) {
     var inc = rows.filter(function (r) { return r.inc; });
     return [["평균", "avg"], ["최대", "max"], ["최소", "min"]].map(function (k) {
@@ -970,24 +976,24 @@
       if (subj ? V.hlSubj : r.hl) cls += " hl";
       return '<tr class="' + cls + '"' + (subj ? "" : ' data-i="' + (r.no - 1) + '"') + "><td>" + (subj ? "" : '<span class="gr" title="끌어서 순서 바꾸기">⠿</span>') + esc(c[0]) + "</td><td>" +
         (subj ? "-" : '<input type="checkbox" data-i="' + (r.no - 1) + '"' + (r.inc ? " checked" : "") + ">") +
-        "</td><td>" + esc(c[2]) + "</td><td>" + link(r) + "</td>" + c.slice(4, 16).map(function (v, k) {
-          // 대상지 대지(k=5)·연면적(k=6)은 늘 고칠 수 있다(평, 2026-10-30 사용자 요청) — 칸 모양 없이 글자처럼 보이고 누르면 커서만 깜빡인다.
+        "</td><td>" + esc(c[2]) + "</td><td>" + link(r) + "</td>" + c.slice(4, 17).map(function (v, k) {
+          // 대상지 대지(k=6)·연면적(k=7)은 늘 고칠 수 있다(평, 2026-10-30 사용자 요청) — 칸 모양 없이 글자처럼 보이고 누르면 커서만 깜빡인다.
           //   고친 값은 버건디색. 비우면 원래 값(거래 기록·땅 정보)으로 돌아간다
-          if (subj && (k === 5 || k === 6)) {
-            var f = k === 5 ? "land" : "bldg", mine = V.data.subject[k === 5 ? "userLand" : "userBldg"];
-            return '<td class="n"><input class="sin' + (mine ? " mine" : "") + '" data-f="' + f + '" type="text" inputmode="decimal" autocomplete="off" title="' + (k === 5 ? "대지" : "연면적") +
+          if (subj && (k === 6 || k === 7)) {
+            var f = k === 6 ? "land" : "bldg", mine = V.data.subject[k === 6 ? "userLand" : "userBldg"];
+            return '<td class="n"><input class="sin' + (mine ? " mine" : "") + '" data-f="' + f + '" type="text" inputmode="decimal" autocomplete="off" title="' + (k === 6 ? "대지" : "연면적") +
               '(평)을 눌러 고치면 단가·추정가격에 씁니다' + (mine ? " — 비우면 원래 값으로" : "") + '" value="' + esc(v || "") + '"></td>';
           }
-          return "<td" + (k >= 4 && k <= 8 || k >= 10 ? ' class="n"' : "") + ">" + esc(v) + "</td>"; }).join("") +
-        '<td class="note">' + esc(c[16]) + "</td></tr>";
+          return "<td" + (k >= 5 && k <= 9 || k >= 11 ? ' class="n"' : "") + ">" + esc(v) + "</td>"; }).join("") +
+        '<td class="note">' + esc(c[17]) + "</td></tr>";
     };
     var tw = $(".tw"); tw.hidden = false;
     var srt = V.sort || {};
     tw.innerHTML = "<table><thead><tr>" + HEAD.map(function (h, k) {
       var btn = SORT[k] ? '<button class="so' + (srt.k === k ? " on" : "") + '" data-so="' + k + '" title="오름차순·내림차순">' + (srt.k === k ? (srt.dir > 0 ? "▲" : "▼") : "↕") + "</button>" : "";
-      return "<th" + (k >= 8 && k <= 15 && k !== 13 ? ' class="n"' : "") + ">" + (h === "공시지가대비" ? h + "<sup>*</sup>" : h) + btn + "</th>"; }).join("") + "</tr></thead><tbody>" +
+      return "<th" + (k >= 9 && k <= 16 && k !== 14 ? ' class="n"' : "") + ">" + (h === "공시지가대비" ? h + "<sup>*</sup>" : h) + btn + "</th>"; }).join("") + "</tr></thead><tbody>" +
       tr(sr, "subj") + rows.map(function (r) { return tr(r, r.inc ? "" : "out"); }).join("") + "</tbody><tfoot>" +
-      footRows(rows).map(function (c) { return '<tr><td colspan="8">' + esc(c[0]) + "</td>" + c.slice(8, 16).map(function (v) { return '<td class="n">' + esc(v) + "</td>"; }).join("") + "<td></td></tr>"; }).join("") + "</tfoot></table>";
+      footRows(rows).map(function (c) { return '<tr><td colspan="9">' + esc(c[0]) + "</td>" + c.slice(9, 17).map(function (v) { return '<td class="n">' + esc(v) + "</td>"; }).join("") + "<td></td></tr>"; }).join("") + "</tfoot></table>";
     tw.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
       cb.onchange = function () { V.rows[+cb.dataset.i].inc = cb.checked; save(); render(); };
     });
@@ -1056,7 +1062,7 @@
   function numberInc() { var n = 0; V.rows.forEach(function (r) { r.dno = r.inc ? ++n : null; }); }
   // 순서(정렬·끌기)와 포함 체크를 거래 고유 키로 저장한다(다시 열어도 그대로)
   function save() { try { localStorage.setItem(KEY, JSON.stringify({ data: V.data, order: V.rows.map(function (r) { return r.key; }),
-    incBy: V.rows.reduce(function (o, r) { o[r.key] = r.inc; return o; }, {}), sort: V.sort || null, cols: 17, onlyInc: !!V.onlyInc, dupLatest: !!V.dupLatest,
+    incBy: V.rows.reduce(function (o, r) { o[r.key] = r.inc; return o; }, {}), sort: V.sort || null, cols: 18, onlyInc: !!V.onlyInc, dupLatest: !!V.dupLatest,
     dupOff: V.rows.filter(function (r) { return r.dupOff; }).map(function (r) { return r.key; }) })); } catch (e) {} }
   // ── 밸류맵 지도 위 표시(2026-10-22): 지도 표시는 div.naver-maps-marker[data-pnu] 라서 CSS 로 고른다(지도를 움직여도 그대로).
   //   포함한 거래의 필지 = 테라코타 테두리, '밸류맵 지도에 포함 거래만'을 켜면 나머지 필지 표시는 숨긴다(대상지는 늘 보임). 창을 닫으면 원래대로.
@@ -1125,8 +1131,8 @@
         var bg = s ? "#1d2433" : (p.inc ? C : "#fff"), fg = s ? "#ffd60a" : (p.inc ? "#fff" : C), bd = s ? "#fff" : C;
         var ic = L.divIcon({ className: "", iconSize: [sz, sz], html: '<div class="pin" style="width:' + sz + "px;height:" + sz + "px;line-height:" + (sz - 4) + "px;background:" + bg + ";color:" + fg + ";border-color:" + bd + '">' + (s ? "★" : p.no) + "</div>" });
         L.marker([p.lat, p.lng], { icon: ic, zIndexOffset: s ? 1000 : 0 }).addTo(layer)
-          .bindPopup("<b>" + p.t[0] + ". " + p.t[3] + "</b><br>" + [p.t[2] !== "-" ? p.t[2] : "", p.t[4], p.t[6], p.t[7]].filter(Boolean).join(" · ") +   // 거래가 없는 대상지(도로 등)는 빈 값을 빼고
-          (p.t[8] ? "<br>" + p.t[8] + "억원" + (p.t[11] ? " · 토지 " + p.t[11] + "만원/평" : "") + (p.t[12] ? " · 연면적 " + p.t[12] + "만원/평" : "") : "") + (p.t[14] ? " · 공시지가대비 " + p.t[14] : "") + (p.t[16] ? '<br><span style="color:#b45309">' + p.t[16] + "</span>" : ""));
+          .bindPopup("<b>" + p.t[0] + ". " + p.t[3] + "</b><br>" + [p.t[2] !== "-" ? p.t[2] : "", p.t[4], p.t[6], p.t[7], p.t[8]].filter(Boolean).join(" · ") +   // 거래가 없는 대상지(도로 등)는 빈 값을 빼고
+          (p.t[9] ? "<br>" + p.t[9] + "억원" + (p.t[12] ? " · 토지 " + p.t[12] + "만원/평" : "") + (p.t[13] ? " · 연면적 " + p.t[13] + "만원/평" : "") : "") + (p.t[15] ? " · 공시지가대비 " + p.t[15] : "") + (p.t[17] ? '<br><span style="color:#b45309">' + p.t[17] + "</span>" : ""));
         g.push([p.lat, p.lng]);
       });
       document.querySelectorAll("td.no").forEach(function (td) { td.style.color = td.parentNode.classList.contains("out") ? "" : C; });
@@ -1193,7 +1199,7 @@
       '<div>번호 색 <input id="col" type="color" value="#D9653B" title="동그라미 번호 색"><button id="col0" class="lk" title="기본색으로">기본색</button></div>' +
       '<div><button id="oinc" class="btn" style="border:0" title="포함(Y)으로 체크한 거래와 대상지만 지도·표에 보이기">포함만 보기</button><button id="fs" class="btn" style="border:0">⛶ 지도 크게 보기</button></div></div></div>' +
       '<div class="wrap"><div class="tbar"><b>비교사례 표</b><button id="cp" class="btn">표 복사</button></div><table><thead><tr>' + body[0].map(function (h) { return "<th>" + (h === "공시지가대비" ? esc(h) + "<sup>*</sup>" : esc(h)) + "</th>"; }).join("") + "</tr></thead><tbody>" +
-      body.slice(1).map(function (c, i) { return '<tr class="' + (i === 0 ? "subj" : (c[1] === "N" ? "out" : "")) + '">' + c.map(function (v, k) { return "<td" + (k === 16 ? ' class="note"' : k === 0 ? ' class="no"' : "") + ">" + esc(v) + "</td>"; }).join("") + "</tr>"; }).join("") +
+      body.slice(1).map(function (c, i) { return '<tr class="' + (i === 0 ? "subj" : (c[1] === "N" ? "out" : "")) + '">' + c.map(function (v, k) { return "<td" + (k === 17 ? ' class="note"' : k === 0 ? ' class="no"' : "") + ">" + esc(v) + "</td>"; }).join("") + "</tr>"; }).join("") +
       "</tbody><tfoot>" + foot.map(function (c) { return "<tr>" + c.map(function (v) { return "<td>" + esc(v) + "</td>"; }).join("") + "</tr>"; }).join("") + "</tfoot></table><p style=\"color:#667085\">* 공시지가대비 = 거래 당시 공시지가 대비 토지단가 배수. 채운 동그라미 = 비교사례, 속 빈 동그라미 = 뺀 거래, ★ = 대상지. 단가는 실거래가 ÷ (면적㎡ × 0.3025). 표 복사는 엑셀에 그대로 붙습니다.</p></div><script>" +
       "(" + mapPage.toString().replace(/<\//g, "<\\/") + ")(" + J(pts) + "," + (d.config.radiusKm || 0) + "," + J(tsvOf(body.concat(foot))) + ");</scr" + "ipt></body></html>";
   }
@@ -1266,7 +1272,8 @@
         var pos = {}; last.order.forEach(function (k, i) { pos[k] = i; });
         V.rows.sort(function (a, b) { return (pos[a.key] == null ? 1e9 : pos[a.key]) - (pos[b.key] == null ? 1e9 : pos[b.key]); });
         V.rows.forEach(function (r) { if (last.incBy && r.key in last.incBy) r.inc = last.incBy[r.key]; });
-        renumber(); V.sort = last.sort || null; if (V.sort && (last.cols || 15) < 17 && V.sort.k >= 5) V.sort.k += 17 - (last.cols || 15);   // 예전 저장(열이 적었음)의 정렬 열 번호를 옮긴다 V.onlyInc = !!last.onlyInc; $('[data-k="onlyinc"]').checked = V.onlyInc;
+        renumber(); V.sort = last.sort || null; if (V.sort && (last.cols || 15) < 17 && V.sort.k >= 5) V.sort.k += 17 - (last.cols || 15);
+        if (V.sort && (last.cols || 15) < 18 && V.sort.k >= 8) V.sort.k += 1;   // 규모 열(8)이 들어가며 밀림   // 예전 저장(열이 적었음)의 정렬 열 번호를 옮긴다 V.onlyInc = !!last.onlyInc; $('[data-k="onlyinc"]').checked = V.onlyInc;
         V.dupLatest = !!last.dupLatest; $('[data-k="duplatest"]').checked = V.dupLatest;
         V.rows.forEach(function (r) { if ((last.dupOff || []).indexOf(r.key) >= 0) r.dupOff = true; });
       } else (last.inc || []).forEach(function (v, i) { if (V.rows[i]) V.rows[i].inc = v; });
