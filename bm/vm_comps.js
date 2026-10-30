@@ -57,7 +57,7 @@
     "#vmc .row button.pri{background:#D9653B;border-color:#D9653B;color:#fff;font-weight:700}#vmc .row button:disabled{opacity:.45;cursor:default}" +
     "#vmc .msg{min-height:16px;font-size:12px;color:#b45309;white-space:pre-line}#vmc .sum{font-size:12.5px;background:#FBEFE9;border:1px solid #EDB49C;border-radius:6px;padding:6px 8px}" +
     "#vmc table{border-collapse:collapse;width:100%;font-size:12px}#vmc th,#vmc td{border-bottom:1px solid #eaecf0;padding:4px 5px;text-align:left;white-space:nowrap}" +
-    "#vmc th{background:#f6f7f9;position:sticky;top:0}#vmc td.n,#vmc th.n{text-align:right}#vmc tr.subj td{background:#fff7d6}#vmc input.sin{width:70px;font:inherit;font-size:12px;padding:1px 4px;border:1px dashed #D9653B;border-radius:4px;background:#fff;text-align:right}#vmc tr.out td{color:#98a2b3}#vmc tbody tr{cursor:pointer}#vmc tbody tr.hl td{background:#fff3b0}#vmc tbody tr:hover td{box-shadow:inset 0 -1px 0 #f0d78c}#vmc tfoot td{background:#f6f7f9;font-weight:700}#vmc tfoot tr:nth-child(1) td{border-top:2px solid #d0d5dd}" +
+    "#vmc th{background:#f6f7f9;position:sticky;top:0}#vmc td.n,#vmc th.n{text-align:right}#vmc tr.subj td{background:#fff7d6}#vmc input.sin{width:100%;min-width:48px;box-sizing:border-box;font:inherit;color:inherit;padding:0;margin:0;border:0;outline:0;background:transparent;text-align:right;cursor:text}#vmc input.sin.mine{color:#8B1E3F;font-weight:700}#vmc tr.out td{color:#98a2b3}#vmc tbody tr{cursor:pointer}#vmc tbody tr.hl td{background:#fff3b0}#vmc tbody tr:hover td{box-shadow:inset 0 -1px 0 #f0d78c}#vmc tfoot td{background:#f6f7f9;font-weight:700}#vmc tfoot tr:nth-child(1) td{border-top:2px solid #d0d5dd}" +
     "#vmc td.note{white-space:normal;min-width:300px;font-size:11.5px;color:#b45309}#vmc a{color:#D9653B}#vmc .tw{overflow:auto;flex:1 1 auto;min-height:170px;max-height:none;border:1px solid #eaecf0;border-radius:6px}" +
     "#vmc.min .bd{display:none}#vmc .hint{font-size:11.5px;color:#667085}" +
     "#vmc .rz{position:absolute;left:-3px;top:-3px;width:16px;height:16px;cursor:nwse-resize;z-index:3}" +
@@ -971,10 +971,12 @@
       return '<tr class="' + cls + '"' + (subj ? "" : ' data-i="' + (r.no - 1) + '"') + "><td>" + (subj ? "" : '<span class="gr" title="끌어서 순서 바꾸기">⠿</span>') + esc(c[0]) + "</td><td>" +
         (subj ? "-" : '<input type="checkbox" data-i="' + (r.no - 1) + '"' + (r.inc ? " checked" : "") + ">") +
         "</td><td>" + esc(c[2]) + "</td><td>" + link(r) + "</td>" + c.slice(4, 16).map(function (v, k) {
-          // 대상지 대지(k=5)·연면적(k=6)을 어디서도 못 찾았으면 직접 넣는 칸(평) — 2026-10-29 사용자 요청. 넣은 값은 ✎ 로 다시 고칠 수 있다
+          // 대상지 대지(k=5)·연면적(k=6)은 늘 고칠 수 있다(평, 2026-10-30 사용자 요청) — 칸 모양 없이 글자처럼 보이고 누르면 커서만 깜빡인다.
+          //   고친 값은 버건디색. 비우면 원래 값(거래 기록·땅 정보)으로 돌아간다
           if (subj && (k === 5 || k === 6)) {
             var f = k === 5 ? "land" : "bldg", mine = V.data.subject[k === 5 ? "userLand" : "userBldg"];
-            if (!v || mine) return '<td class="n"><input class="sin" data-f="' + f + '" type="number" min="0" step="0.1" placeholder="평 입력" title="' + (k === 5 ? "대지" : "연면적") + '을(를) 평으로 넣으면 단가·추정가격에 씁니다" value="' + (mine ? +(mine * M2P).toFixed(1) : "") + '"></td>';
+            return '<td class="n"><input class="sin' + (mine ? " mine" : "") + '" data-f="' + f + '" type="text" inputmode="decimal" autocomplete="off" title="' + (k === 5 ? "대지" : "연면적") +
+              '(평)을 눌러 고치면 단가·추정가격에 씁니다' + (mine ? " — 비우면 원래 값으로" : "") + '" value="' + esc(v || "") + '"></td>';
           }
           return "<td" + (k >= 4 && k <= 8 || k >= 10 ? ' class="n"' : "") + ">" + esc(v) + "</td>"; }).join("") +
         '<td class="note">' + esc(c[16]) + "</td></tr>";
@@ -991,10 +993,13 @@
     });
     tw.querySelectorAll("input.sin").forEach(function (x) {
       x.onclick = function (e) { e.stopPropagation(); };
+      x.onkeydown = function (e) { if (e.key === "Enter") x.blur(); if (e.key === "Escape") { x.value = x.defaultValue; x.blur(); } };
       x.onchange = function () {   // 평 → ㎡ 로 담아 둔다. 비우면 직접 넣은 값을 지운다
-        var v = +x.value, k = x.dataset.f === "land" ? "userLand" : "userBldg";
+        var v = +String(x.value).replace(/[,\s평]/g, ""), k = x.dataset.f === "land" ? "userLand" : "userBldg";
+        if (x.value.trim() && !(v > 0)) { x.value = x.defaultValue; return msg("숫자(평)로 넣어 주세요."); }
+        if (x._done) return; x._done = true;   // 표를 다시 그리며 칸이 빠질 때 blur·change 가 한 번 더 와도 무시
         if (v > 0) V.data.subject[k] = v / M2P; else delete V.data.subject[k];
-        save(); render(); msg("대상지 " + (k === "userLand" ? "대지" : "연면적") + (v > 0 ? "을(를) " + v + "평으로 넣었습니다 — 추정가격을 다시 계산했습니다." : " 직접 입력을 지웠습니다."));
+        save(); setTimeout(render, 0); msg("대상지 " + (k === "userLand" ? "대지" : "연면적") + (v > 0 ? "을(를) " + v + "평으로 넣었습니다 — 추정가격을 다시 계산했습니다." : " 직접 입력을 지웠습니다."));
       };
     });
     // 줄 누르면 연한 노란색 표시(읽기 편하게, 2026-10-22) — 다시 누르면 지움. 체크 칸·지번 링크·⠿ 를 누를 때는 그대로
