@@ -203,7 +203,7 @@
   P.innerHTML = '<div class="eg" data-e="l"></div><div class="eg" data-e="r"></div><div class="eg" data-e="t"></div><div class="eg" data-e="b"></div><div class="eg" data-e="tr"></div><div class="eg" data-e="br"></div>' +
     '<div class="hd"><b>여러 필지 선택</b><button data-a="reset" title="새로고침 — 고른 필지·배경·이름표를 지우고 처음 상태로">↻</button><button data-a="min" title="접기">–</button><button data-a="close" title="닫기">×</button></div>' +
     '<div class="bd"><textarea placeholder="지번을 한 줄에 하나씩 (예: 용산구 한강로2가 424) · PNU 19자리도 됩니다"></textarea>' +
-    '<div class="row"><button class="pri" data-a="add">목록 추가</button><button data-a="stopadd" class="on" hidden>추가 멈춤</button><button data-a="pick">지도 클릭으로 고르기</button><button data-a="fit">전체 보기</button><button data-a="zone" title="지도에 마우스로 구역 둘레를 그려 그 안 필지의 수·면적·공시지가 합계를 보고, 구역별로 번호·색을 정합니다">구역 묶기</button><button data-a="zoneclr" hidden title="그린 구역을 모두 지우고 다시 그립니다">구역 지우기</button>' +
+    '<div class="row"><button class="pri" data-a="add">목록 추가</button><button data-a="stopadd" class="on" hidden>추가 멈춤</button><button data-a="pick">지도 클릭으로 고르기</button><button data-a="fit" title="포함(체크)한 필지가 모두 보이게 맞추기">전체 보기</button><button data-a="zone" title="지도에 마우스로 구역 둘레를 그려 그 안 필지의 수·면적·공시지가 합계를 보고, 구역별로 번호·색을 정합니다">구역 묶기</button><button data-a="zoneclr" hidden title="그린 구역을 모두 지우고 다시 그립니다">구역 지우기</button>' +
     '<button data-a="mapopen" class="pri2" title="칠한 필지를 새 창의 선명한 카카오 지도 위에 — 캡처하기 좋게">지도 열기</button><button data-a="copy">표 복사</button><button data-a="link">링크 복사</button><button data-a="clear">모두 지우기</button><button data-a="mapsave" title="[지도 열기] 화면을 HTML 파일 하나로 내려받기 — 받은 사람이 열어도 그대로 보입니다">지도 HTML 저장</button></div>' +
     '<div class="row bgrow"><div class="bgdd"><button type="button" data-a="bgdd" class="bgsum" title="배경을 여러 개 겹치고 저마다 투명도를 정합니다">배경</button><div class="bgl" hidden>' +
     '<table class="bgt"><colgroup><col style="width:150px"><col style="width:46px"><col style="width:108px"><col style="width:40px"></colgroup>' +
@@ -365,7 +365,9 @@
         "</td><td class=n title='" + esc(p.priceYm || "") + "'>" + fmt(p.price) + "</td><td class=xc><button class=x title='빼기'>×</button></td>";
       tr.onclick = function (e) {   // 고른 행을 다시 누르면 노란 표시를 끈다(지도 이동 없음)
         if (e.target.className === "x") return remove(p.pnu);
-        if (e.target.classList.contains("inc")) { p.off = !e.target.checked; saveOff(); render(); return; }
+        if (e.target.classList.contains("inc")) {
+          if (E.incDragged) { e.preventDefault(); return; }   // 끌어서 체크한 직후의 클릭은 무시(이미 바꿨음)
+          p.off = !e.target.checked; saveOff(); render(); return; }
         // Ctrl+클릭 = 한 필지씩 넣고 빼기, Shift+클릭 = 마지막으로 누른 줄부터 이 줄까지 한꺼번에(2026-10-24 사용자 요청: Ctrl·Shift 다중 선택)
         if (e.shiftKey && E.anchor != null) {
           var a0 = E.list.findIndex(function (x) { return x.pnu === E.anchor; }), b0 = i;
@@ -417,6 +419,37 @@
     sv.title = "면적(㎡) × 공시지가(원/㎡) 합계" + (noPrice ? " · 공시지가나 면적이 없는 " + noPrice + "필지는 빠짐" : "");
     try { localStorage.setItem(KEY, JSON.stringify(E.list.map(function (p) { return p.pnu; }))); } catch (e) {}
   }
+  // 포함 체크 끌기(2026-10-30 사용자 요청): 체크 칸을 누른 채 위아래로 끌면 지나간 줄을 모두 같은 상태로(누른 칸을 바꾼 상태 = 켜기 또는 끄기).
+  //   누른 줄부터 지금 줄까지 범위 전체에 칠하고, 손을 떼면 저장·다시 그린다. 줄 끌어 순서 바꾸기(draggable)와 겹치지 않게 mousedown 에서 막는다
+  P.addEventListener("mousedown", function (e) {
+    var cb = e.target.classList && e.target.classList.contains("inc") ? e.target : null; if (!cb || e.button !== 0) return;
+    e.preventDefault();
+    var rows = Array.prototype.slice.call(P.querySelectorAll(".tw tbody tr")), a0 = rows.indexOf(cb.closest("tr")); if (a0 < 0) return;
+    var on = !cb.checked, last = a0, moved = false;
+    // Shift+클릭 = 지난번에 누른 체크 칸부터 이 칸까지 한꺼번에(2026-10-30 사용자 요청)
+    var st = e.shiftKey && E.incAnchor != null && E.incAnchor < rows.length ? E.incAnchor : a0;
+    if (st !== a0) { last = a0; moved = true; }
+    E.incAnchor = a0;
+    var paint = function (to) {
+      for (var i = Math.min(st, to); i <= Math.max(st, to); i++) {
+        var p = E.list[i], c = rows[i] && rows[i].querySelector("input.inc"); if (!p || !c) continue;
+        p.off = !on; c.checked = on; rows[i].classList.toggle("off", !on);
+      }
+    };
+    paint(a0);
+    var mv = function (ev) {
+      var el = document.elementFromPoint(ev.clientX, ev.clientY), tr = el && el.closest && el.closest(".tw tbody tr"); if (!tr) return;
+      var i = rows.indexOf(tr); if (i >= 0 && i !== last) { last = i; moved = true; paint(i); }
+    };
+    var up = function () {
+      document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up);
+      E.incDragged = true; setTimeout(function () { E.incDragged = false; }, 0);
+      E.incAnchor = last;   // 다음 Shift+클릭은 마지막으로 칠한 줄부터
+      saveOff(); render();
+      if (moved) msg(Math.abs(last - st) + 1 + "필지를 " + (on ? "포함했습니다." : "뺐습니다."));
+    };
+    document.addEventListener("mousemove", mv); document.addEventListener("mouseup", up);
+  });
   // 머리 체크 = 모든 필지 포함 / 모두 빼기(2026-10-24 사용자 요청)
   P.addEventListener("change", function (e) {
     if (!e.target.classList || !e.target.classList.contains("incall")) return;
@@ -763,7 +796,7 @@
       E.pick = !E.pick; e.target.classList.toggle("on", E.pick); document.body.classList.toggle("emp-pick", E.pick);
       msg(E.pick ? "지도에서 필지를 누르면 추가, 칠해진 필지를 누르면 뺍니다. (토지이음 기본 클릭은 잠시 꺼짐)" : "");
     }
-    if (a === "fit") zoomTo(E.list.map(function (p) { return p.feature; }));
+    if (a === "fit") { var fl = IL(); zoomTo((fl.length ? fl : E.list).map(function (p) { return p.feature; })); }   // 전체 보기 = 포함(체크)한 필지만(2026-10-30), 하나도 없으면 전부
     if (a === "color0") {   // 고른 필지가 있으면 그 필지만 전체 색으로, 없으면 전체를 기본색으로(필지별 색도 지움)
       var pk = picked();
       if (pk.length) { pk.forEach(function (pn) { delete E.pc[pn]; }); savePc(); src.changed(); render(); }
